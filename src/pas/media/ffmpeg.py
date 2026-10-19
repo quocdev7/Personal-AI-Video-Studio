@@ -244,18 +244,21 @@ def run_ffmpeg(
     ctx: "JobContext | None" = None,
     duration: float | None = None,
     on_progress: Callable[[float], None] | None = None,
+    cwd: Path | None = None,
 ) -> None:
     """Chạy ffmpeg với `args` (không gồm tên chương trình).
 
     - Tiến trình lấy từ `-progress pipe:1` (thời gian đã xử lý / `duration`).
     - Nếu `ctx` bị hủy: kill tiến trình và ném JobCancelled.
     - Lỗi: ném ExternalToolError kèm các dòng stderr cuối.
+    - `cwd`: thư mục làm việc — để bộ lọc tham chiếu file (ass=, -/filter_complex) bằng tên tương đối,
+      tránh phải escape đường dẫn Windows (dấu hai chấm của ổ đĩa, dấu tiếng Việt) bên trong cú pháp filter.
     """
     cmd = [str(tools.ffmpeg), "-hide_banner", "-nostdin", "-nostats", "-progress", "pipe:1", *args]
     log.info("Chạy: %s", subprocess.list2cmdline(cmd))
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
-        text=True, encoding="utf-8", errors="replace", creationflags=CREATE_NO_WINDOW,
+        text=True, encoding="utf-8", errors="replace", creationflags=CREATE_NO_WINDOW, cwd=cwd,
     )
     stderr_tail: deque[str] = deque(maxlen=50)
 

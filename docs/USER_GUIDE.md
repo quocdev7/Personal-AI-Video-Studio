@@ -21,6 +21,22 @@
   - Clip cuối ngắn hơn 30% độ dài clip được gộp vào clip trước. Mỗi clip được kiểm tra lại sau khi xuất.
   - Trên máy chỉ có CPU, thời gian mã hóa khoảng 0,5–2 lần thời lượng video. Nếu tắt máy giữa chừng, vào *Hàng đợi* →
     *Chạy lại*: các clip đã xong được giữ, chỉ làm tiếp phần còn lại.
+  - Bỏ chọn *Cắt thành nhiều clip* để xuất nguyên video thành một file `<tên video>.mp4` (chỉ đổi khung / Việt hóa).
+- **Việt hóa phụ đề** (tùy chọn trong *Tạo clip ngắn*) — cho video có **phụ đề tiếng Trung in sẵn trên hình**: đọc
+  chữ Trung, dịch sang tiếng Việt, làm mờ đúng vùng chữ Trung trong lúc chữ hiện và đặt phụ đề Việt đè lên.
+  - Cài một lần:
+    1. Thư viện đọc chữ: `uv sync --extra vietsub` (RapidOCR, Apache-2.0, ~15 MB mô hình đi kèm).
+    2. Ollama: `winget install Ollama.Ollama` (miễn phí, MIT), rồi tải mô hình dịch `ollama pull qwen2.5:7b`
+       (~4,7 GB, Apache-2.0). Ứng dụng **không tự tải** mô hình; trang *Tổng quan* cho biết đã sẵn sàng chưa.
+  - Dùng: tích *Việt hóa phụ đề*, chọn *Tìm phụ đề ở* (*Nửa dưới khung hình* — nhanh, đúng với đa số video; hoặc
+    *Toàn khung hình*), bấm **Tạo clip**. Kết quả nằm trong thư mục `<tên video> - clip 9x16 vietsub`, kèm
+    `<tên video> - vi.srt` (bản dịch) và `<tên video> - zh.srt` (chữ Trung đọc được) để xem lại.
+  - Mọi xử lý chạy trên máy này; Ollama chỉ nghe ở `127.0.0.1`, không gửi dữ liệu ra ngoài, không tốn phí.
+  - Tốc độ trên máy không có GPU: đọc chữ ~15–30 giây cho mỗi phút video, dịch ~3–5 giây mỗi câu.
+  - Giới hạn: **bản dịch máy có thể sai** (xưng hô, thành ngữ) — xem lại file `vi.srt` trước khi đăng. Câu không dịch
+    được vẫn bị làm mờ và được liệt kê trong kết quả. Chữ đứng yên quá 20 giây (logo, watermark) chỉ bị làm mờ, không
+    dịch. Không xử lý phụ đề dạng track rời (chữ mềm) và chưa được thử trên nhiều video thật.
+  - Làm mờ phụ đề gốc và thêm bản dịch **không** làm bạn có quyền với video; chỉ đăng nội dung bạn được phép dùng.
 - **Dự án** — nhóm video theo dự án với thư mục đầu vào/đầu ra. "Xóa khỏi danh sách" chỉ xóa bản ghi, **không xóa file**.
 - **Kiểm tra media** — chọn hoặc kéo thả file video/âm thanh → *Bắt đầu kiểm tra*. Kết quả: định dạng, thời lượng,
   độ phân giải, tỷ lệ khung (16:9, 9:16...), FPS, luồng âm thanh và cảnh báo (không có tiếng, thiếu thời lượng...).

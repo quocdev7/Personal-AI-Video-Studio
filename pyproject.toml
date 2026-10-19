@@ -14,6 +14,9 @@ dependencies = [
 asr = [
     "faster-whisper>=1.1,<2",
 ]
+vietsub = [
+    "rapidocr-onnxruntime==1.4.4",
+]
 
 [dependency-groups]
 dev = [
@@ -35,4 +38,5 @@ packages = ["src/pas"]
 testpaths = ["tests"]
 markers = [
     "ffmpeg: test cần FFmpeg/ffprobe thật trên máy",
+    "ollama: test gọi Ollama thật trên máy (chậm, chỉ chạy khi đặt PAS_TEST_OLLAMA=1)",
 ]

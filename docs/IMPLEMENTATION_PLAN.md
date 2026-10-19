@@ -33,6 +33,10 @@ kiểm tra file đầu ra bằng probe (Module F).
 **Tiến độ:** đã xong và test phần "Tạo clip ngắn" (chia theo thời lượng, mã hóa lại chính xác, đổi khung kèm nền mờ /
 cắt / viền đen, kiểm tra đầu ra, chạy tiếp sau gián đoạn). Còn lại: phát hiện cảnh, xem trước, chỉnh tay điểm cắt.
 
+**Làm trước (theo yêu cầu):** Việt hóa phụ đề tiếng Trung in trên hình, gắn vào "Tạo clip ngắn" — module
+`pas.modules.vietsub`: OCR (RapidOCR) → dịch bằng Ollama + qwen2.5:7b → làm mờ vùng chữ + phụ đề ASS. Đã chọn LLM
+cục bộ cho dịch zh→vi (xem GĐ6). Còn lại: thử trên video thật, trình chỉnh bản dịch trước khi xuất.
+
 ## Giai đoạn 5 — Chia theo nội dung (Module C3)
 Cần LLM cục bộ (Ollama hoặc llama.cpp + Qwen 2.5 instruct; giấy phép kiểm tra theo từng mô hình). Dựa trên phụ đề của
 Giai đoạn 3 để đề xuất ranh giới tập + tiêu đề; người dùng duyệt trước khi xuất. Trên CPU sẽ chậm — ước lượng thời gian
@@ -41,7 +45,8 @@ trước khi chạy. **Cần người dùng xác nhận trước khi cài Ollama
 ## Giai đoạn 6 — Âm thanh, dịch, lồng tiếng (Module D, E)
 - Âm thanh: chuẩn hóa âm lượng (`loudnorm`), khử nhiễu (`afftdn`/`arnndn`), tách giọng (Demucs, MIT — chậm trên CPU).
 - Dịch zh→vi giữ timestamp: so sánh Argos Translate (MIT, qua tiếng Anh), LLM cục bộ, NLLB (CC-BY-NC — **chỉ dùng phi
-  thương mại**). Chọn sau khi thử chất lượng trên mẫu thật.
+  thương mại**). **Đã chọn LLM cục bộ** (Ollama + qwen2.5:7b, Apache-2.0) và dùng cho Việt hóa phụ đề; phụ đề từ GĐ3
+  sẽ dùng lại `pas.modules.vietsub.translate`.
 - TTS: Piper (MIT) với giọng tiếng Việt — kiểm tra giấy phép **từng giọng** trước khi tích hợp.
 
 ## Giai đoạn 7 — Hoàn thiện UI

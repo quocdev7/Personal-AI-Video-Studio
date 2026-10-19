@@ -112,3 +112,34 @@ def test_clips_invalid_input_shows_error(window, monkeypatch):
     monkeypatch.setattr("pas.ui.pages.clips.show_error", lambda parent, exc, title: shown.append(exc))
     window.clips.btn_start.click()
     assert shown and window.clips.job_id is None
+
+
+def test_clips_vietsub_options(window, monkeypatch, tmp_path):
+    page = window.clips
+    page.split.setChecked(False)
+    page.vietsub.setChecked(True)
+    assert not page.seconds.isEnabled() and page.region.isEnabled()
+    page.region.setCurrentIndex(page.region.findData("full"))
+    submitted = []
+    monkeypatch.setattr(window.services.jobs, "submit",
+                        lambda kind, title, params: submitted.append(params) or type("J", (), {"id": 1})())
+    page.picker.set_path(str(tmp_path / "v.mp4"))
+    page.btn_start.click()
+    [p] = submitted
+    assert (p["segment_seconds"], p["vietsub"], p["vietsub_region"]) == (0, True, "full")
+    s = window.services.settings
+    assert (s.clip_split, s.clip_vietsub, s.clip_vietsub_region) == (False, True, "full")
+
+
+def test_render_result_vietsub():
+    from pas.ui.pages.clips import render_result
+
+    base = {"output_dir": "D:/ra", "files": [{"path": "D:/ra/a.mp4", "start": 0, "duration": 5.0, "size_bytes": 10}]}
+    none = render_result({**base, "vietsub": {"lines": 0, "translated": 0, "static": 0, "failed": [],
+                                              "model": "m", "srt_vi": None, "srt_zh": None}})
+    assert "Không tìm thấy phụ đề tiếng Trung" in none
+    html = render_result({**base, "vietsub": {"lines": 3, "translated": 2, "static": 1, "failed": ["<坏>"],
+                                              "model": "qwen2.5:7b", "srt_vi": "D:/ra/a - vi.srt",
+                                              "srt_zh": "D:/ra/a - zh.srt"}})
+    assert "dịch 2/3 câu" in html and "a - vi.srt" in html and "&lt;坏&gt;" in html
+    assert "vietsub" not in render_result({**base, "vietsub": None})

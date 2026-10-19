@@ -40,6 +40,9 @@ Test giao diện chạy với `QT_QPA_PLATFORM=offscreen`.
 | Dung lượng thấp | `ensure_free_space` báo lỗi kèm gợi ý | ✔ (giả lập yêu cầu lớn) | Đã chạy |
 | UI | Mở mọi trang, trang chưa làm bị vô hiệu, chạy kiểm tra media từ UI, lưu cài đặt, đóng không lỗi | ✔ test_ui | Đã chạy |
 | Tạo clip ngắn | Kế hoạch cắt (gộp đuôi, phủ đủ thời lượng), mọi tổ hợp khung × lấp khung, tham số sai, video không tiếng, thư mục trùng, dung lượng thấp, hủy không để file dở, chạy tiếp sau gián đoạn, chạy từ UI | ✔ test_clips, test_ui | Đã chạy |
+| Việt hóa phụ đề | Gom khung → câu (2 dòng, sót khung, nhiễu OCR, logo), lọc bản dịch (còn chữ Hán, id sai), dịch lại câu lỗi, Ollama giả qua HTTP (thiếu mô hình, không kết nối), bộ lọc làm mờ/ASS/SRT, chạy thật OCR + FFmpeg trên video drawtext: OCR lại đầu ra không còn chữ Trung (khung gốc, 9:16), ngoài lúc có chữ không bị làm mờ, file gốc không đổi; báo lỗi sớm khi thiếu Ollama | ✔ test_vietsub, test_ui | Đã chạy |
+| Việt hóa — Ollama thật | 2 câu qua qwen2.5:7b, không còn chữ Hán | ✔ `PAS_TEST_OLLAMA=1` | Đã chạy 2026-10-19 (mặc định bỏ qua vì chậm) |
+| Việt hóa — video thật | Nền phức tạp, nhiều kiểu chữ, chất lượng dịch | ✖ | Chưa — cần video mẫu của người dùng |
 | Một phiên | Phiên thứ hai bị chặn; khóa cũ sau crash không chặn | Thủ công | Đã chạy 2026-10-19 |
 | Video dài (> 1 giờ) | Hiệu năng, bộ nhớ | ✖ | Chưa — làm ở GĐ3 khi có ASR |
 | Phụ đề SRT | Định dạng thời gian, round-trip | ✖ | Chưa — GĐ3 |

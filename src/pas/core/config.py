@@ -26,6 +26,12 @@ class Settings:
     clip_seconds: int = 60
     clip_aspect: str = "9:16"
     clip_fit: str = "blur"
+    clip_split: bool = True  # False = xuất nguyên video (không cắt)
+    clip_vietsub: bool = False
+    clip_vietsub_region: str = "bottom"
+    # Dịch bằng LLM cục bộ qua Ollama (chỉ gọi tới máy này).
+    ollama_url: str = "http://127.0.0.1:11434"
+    translate_model: str = "qwen2.5:7b"
 
     def validated(self) -> "Settings":
         if self.max_concurrent_jobs < 1:
@@ -40,6 +46,12 @@ class Settings:
             self.clip_aspect = "9:16"
         if self.clip_fit not in ("blur", "crop", "pad"):
             self.clip_fit = "blur"
+        if self.clip_vietsub_region not in ("bottom", "full"):
+            self.clip_vietsub_region = "bottom"
+        if not self.ollama_url.strip():
+            self.ollama_url = "http://127.0.0.1:11434"
+        if not self.translate_model.strip():
+            self.translate_model = "qwen2.5:7b"
         return self
 
 

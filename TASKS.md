@@ -2,8 +2,9 @@
 
 Trạng thái: **Đã test** = có test tự động chạy qua · **Đã làm, chưa test** · **Chưa làm** · **Bị chặn** (cần quyết định/tài nguyên).
 
-Lần chạy test gần nhất: 2026-10-19, `uv run pytest` → **112 passed, 0 skipped**,
-Windows 11, Python 3.12.13, FFmpeg 9.0.2 (bản build Gyan).
+Lần chạy test gần nhất: 2026-10-19, `uv run pytest` → **148 passed, 1 skipped**
+(test gọi Ollama thật, chỉ chạy khi đặt `PAS_TEST_OLLAMA=1` — đã chạy riêng: passed),
+Windows 11, Python 3.12.13, FFmpeg 9.0.2 (bản build Gyan), RapidOCR 1.4.4, Ollama 0.40.5 + qwen2.5:7b.
 
 ## Giai đoạn 1 — Khảo sát & tài liệu
 | Việc | Trạng thái |
@@ -46,15 +47,34 @@ Windows 11, Python 3.12.13, FFmpeg 9.0.2 (bản build Gyan).
 | Thư mục kết quả mới, không ghi đè; file gốc không đổi; kiểm tra dung lượng trước khi chạy | Đã test |
 | Hủy không để lại file dở; gián đoạn → chạy lại tiếp từ clip chưa xong | Đã test |
 | Trang "Tạo clip ngắn" (chạy từ UI, ghi nhớ lựa chọn, báo lỗi đầu vào) | Đã test (offscreen); ứng dụng khởi động không lỗi, **chưa thao tác thử bằng tay trên desktop** |
+| Tùy chọn không cắt (xuất nguyên video, chỉ đổi khung / Việt hóa) | Đã test |
 | Phát hiện cảnh (`scdet`), xem trước và chỉnh điểm cắt | Chưa làm |
 | Video rất dài (> 1 giờ) | **Chưa test** |
+
+## Việt hóa phụ đề in trên hình (làm trước một phần GĐ6, gắn vào "Tạo clip ngắn")
+| Việc | Trạng thái |
+|---|---|
+| OCR phụ đề Trung (RapidOCR): lấy mẫu 4 khung/giây, chỉ nhận dạng lại khi vùng chữ đổi | Đã test (video drawtext thật) |
+| Gom khung → câu (thời gian, vị trí, phụ đề 2 dòng, bỏ chữ nháy 1 khung, chữ đứng yên > 20 s = logo) | Đã test (unit) |
+| Dịch Trung → Việt bằng Ollama cục bộ (JSON schema, giới hạn token, dịch lại câu lỗi, câu còn chữ Hán = chưa dịch được) | Đã test (Ollama giả qua HTTP) + 1 test với qwen2.5:7b thật |
+| Kiểm tra Ollama/mô hình trước khi chạy, báo lệnh tải + dung lượng; không tự tải | Đã test |
+| Làm mờ đúng vùng chữ Trung chỉ trong lúc chữ hiện + phụ đề Việt (ASS) đặt đè, mọi khung hình | Đã test: OCR lại khung đầu ra không còn chữ Trung (khung gốc và 9:16); xem ảnh khung bằng mắt |
+| Xuất `<tên> - vi.srt` và `<tên> - zh.srt` để xem lại | Đã test |
+| Chạy lại sau gián đoạn: dùng lại kết quả OCR và các lô đã dịch | Đã làm (lưu vào trạng thái), **chưa có test gián đoạn riêng cho Việt hóa** |
+| Kiểm tra môi trường hiển thị RapidOCR, Ollama | Đã làm (chạy qua UI smoke) |
+| Thử trên video thật (nền phức tạp, nhiều kiểu chữ) | **Chưa test** — chỉ có video tổng hợp; cần video thật của bạn |
+| Phụ đề tiếng Trung dạng chữ mềm (track trong MKV) / chữ không phải phụ đề (biển hiệu) | Chưa làm (chỉ OCR chữ in trên hình) |
+
+Tốc độ đo trên máy này (CPU): OCR ~16 s cho mỗi phút video 720p (vùng nửa dưới), ~30 s/phút (toàn khung);
+dịch ~3–5 s mỗi câu với qwen2.5:7b.
 
 ## Giai đoạn 5–8
 Chưa làm. Xem [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
 ## Bị chặn / rủi ro đã biết
 - Không có GPU NVIDIA → Whisper/Demucs/LLM chạy trên CPU, chậm. Cần đo thực tế ở GĐ3.
-- Chia theo nội dung (GĐ5) cần LLM cục bộ — cần duyệt cài Ollama/mô hình.
+- Chia theo nội dung (GĐ5) cần LLM cục bộ — Ollama + qwen2.5:7b đã được duyệt và cài cho Việt hóa phụ đề.
+- Chất lượng dịch của qwen2.5:7b ở mức khá: câu đúng ý nhưng đôi khi cứng/sai xưng hô; luôn cần xem lại trước khi đăng.
 - Dịch: NLLB giấy phép CC-BY-NC (phi thương mại) — cần duyệt nếu chọn.
 - Chưa có máy Windows 10 để kiểm thử.
 - Chưa kiểm thử ổ đĩa đầy thật (mới giả lập).

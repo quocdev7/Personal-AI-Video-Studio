@@ -87,6 +87,17 @@ Quy tắc phụ thuộc: `ui → services → jobs/projects → modules → medi
 - `ffmpeg.py` — tìm binary (cấu hình → PATH → `%LOCALAPPDATA%\Microsoft\WinGet\Links` → `tools\ffmpeg\bin`), `probe()` qua ffprobe JSON, `run_ffmpeg()` đọc `-progress pipe:1` để báo tiến trình thật, kill khi hủy, giữ 50 dòng stderr cuối để báo lỗi.
 - Mọi lệnh truyền dạng danh sách đối số (không qua shell) → an toàn với dấu tiếng Việt, khoảng trắng, ký tự đặc biệt.
 
+### modules/vietsub (Việt hóa phụ đề in trên hình, dùng trong tác vụ "Tạo clip ngắn")
+- `ocr.py` — FFmpeg xuất khung `rawvideo` qua pipe (4 khung/giây, thu nhỏ) → RapidOCR (dò + nhận dạng chữ; chỉ chạy lại
+  nhận dạng khi vùng chữ thay đổi) → `group_events` gom thành câu `SubEvent(start, end, box, text)`; chữ đứng yên > 20 s
+  đánh dấu `static` (logo/watermark).
+- `translate.py` — `OllamaClient` gọi `http://127.0.0.1:11434` (`/api/tags`, `/api/chat` với JSON schema làm `format`,
+  giới hạn `num_predict`), dịch theo lô, kiểm tra kết quả (id hợp lệ, không còn chữ Hán), dịch lại câu lỗi; lưu từng lô
+  vào trạng thái tác vụ để chạy tiếp.
+- `render.py` — gom vùng chữ thành tối đa 24 nhóm → `split/crop/boxblur/overlay` với `enable='between(t,…)'` trên khung
+  gốc; phụ đề Việt dạng ASS (libass) đặt tại tâm vùng chữ sau khi đổi khung; xuất SRT (UTF-8 BOM). Bộ lọc ghi ra file
+  (`-/filter_complex`) trong thư mục tạm của tác vụ, FFmpeg chạy với `cwd` đó để không phải escape đường dẫn Windows.
+
 ### ui
 - `JobEventBridge(QObject)` nhận callback từ thread worker và phát Qt signal (queued connection) để trang cập nhật trên main thread.
 - Trang chưa có backend hiển thị **mờ** trong thanh điều hướng với chú thích giai đoạn — không có nút giả.
@@ -115,3 +126,8 @@ Thời gian lưu ISO-8601 UTC. Xóa dự án chỉ xóa bản ghi, **không** đ
 - Không có khóa API nào trong mã nguồn. Không có lời gọi mạng trong lõi.
 - Tải mô hình (từ Giai đoạn 3) chỉ khi người dùng bấm, hiển thị dung lượng + giấy phép trước khi tải, nguồn: Hugging Face (repo chính thức của mô hình).
 - Tiến trình con chạy với `CREATE_NO_WINDOW`, không dùng `shell=True`.
+- Ngoại lệ duy nhất có kết nối HTTP: Việt hóa phụ đề gọi Ollama **trên máy** (mặc định `127.0.0.1:11434`, đổi được trong
+  `settings.json` → `ollama_url`). Không gửi dữ liệu ra Internet, không khóa API. Ứng dụng không tự tải mô hình; báo lệnh
+  `ollama pull` kèm dung lượng.
+- Giấy phép thành phần Việt hóa: RapidOCR (Apache-2.0, kèm mô hình PaddleOCR Apache-2.0), Ollama (MIT), Qwen2.5-7B-Instruct
+  (Apache-2.0).

@@ -4,12 +4,13 @@ import html
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QProgressBar, QSpinBox, QTextBrowser, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QProgressBar, QSpinBox, QTextBrowser, QVBoxLayout, QWidget,
 )
 
 from pas.core.errors import PasError
 from pas.jobs.models import FINISHED_STATUSES, JobEvent, JobStatus
 from pas.modules.clips.tasks import ASPECT_LABELS, FITS, KIND, MAX_SEGMENT, MIN_SEGMENT, VIDEO_EXTENSIONS
+from pas.modules.vietsub.ocr import REGIONS
 from pas.services import AppServices
 from pas.ui.widgets import PageHeader, PathPicker, button, format_duration, format_size, hint_label, open_in_explorer, show_error
 
@@ -26,8 +27,9 @@ class ClipsPage(QWidget):
         lay = QVBoxLayout(self)
         lay.addWidget(PageHeader(
             "Tạo clip ngắn",
-            "Thả một video vào → tự cắt thành nhiều clip cùng độ dài, đổi khung (vd 9:16 cho TikTok/Shorts/Reels) "
-            "và xuất MP4. Mỗi clip được kiểm tra lại sau khi xuất. File gốc không bị thay đổi.",
+            "Thả một video vào → tự cắt thành nhiều clip cùng độ dài, đổi khung (vd 9:16 cho TikTok/Shorts/Reels), "
+            "tùy chọn Việt hóa phụ đề tiếng Trung in trên hình, rồi xuất MP4. Mỗi clip được kiểm tra lại sau khi xuất. "
+            "File gốc không bị thay đổi.",
         ))
 
         box = QGroupBox("1. Chọn video")
@@ -39,6 +41,8 @@ class ClipsPage(QWidget):
         s = services.settings
         opt = QGroupBox("2. Công thức")
         form = QFormLayout(opt)
+        self.split = QCheckBox("Cắt thành nhiều clip")
+        self.split.setChecked(s.clip_split)
         self.seconds = QSpinBox()
         self.seconds.setRange(MIN_SEGMENT, MAX_SEGMENT)
         self.seconds.setSuffix(" giây")
@@ -52,14 +56,30 @@ class ClipsPage(QWidget):
             self.fit.addItem(label, key)
         self.fit.setCurrentIndex(max(0, self.fit.findData(s.clip_fit)))
         self.aspect.currentIndexChanged.connect(self._sync_fit)
+        self.split.toggled.connect(self._sync_fit)
+        self.vietsub = QCheckBox("Việt hóa phụ đề: đọc chữ Trung in trên hình → dịch sang tiếng Việt → làm mờ chữ Trung")
+        self.vietsub.setChecked(s.clip_vietsub)
+        self.region = QComboBox()
+        for key, label in REGIONS.items():
+            self.region.addItem(label, key)
+        self.region.setCurrentIndex(max(0, self.region.findData(s.clip_vietsub_region)))
+        self.vietsub.toggled.connect(self._sync_fit)
         self.out = PathPicker("dir", placeholder="Để trống = cạnh video gốc (hoặc thư mục mặc định trong Cài đặt)")
+        form.addRow("", self.split)
         form.addRow("Độ dài mỗi clip", self.seconds)
         form.addRow("Khung hình", self.aspect)
         form.addRow("Lấp khung", self.fit)
+        form.addRow("", self.vietsub)
+        form.addRow("Tìm phụ đề ở", self.region)
         form.addRow("Lưu vào", self.out)
         form.addRow(hint_label(
             "Clip cuối ngắn hơn 30% độ dài clip sẽ được gộp vào clip trước. Kết quả nằm trong thư mục mới "
             "'<tên video> - clip 9x16'. Trên máy không có GPU, mã hóa mất khoảng 0,5–2 lần thời lượng video."
+        ))
+        form.addRow(hint_label(
+            "Việt hóa phụ đề cần Ollama và mô hình qwen2.5:7b chạy trên máy này (không gửi dữ liệu ra ngoài). "
+            "Bản dịch máy có thể sai — xem lại file '<tên video> - vi.srt' trước khi đăng. Trên CPU, dịch khoảng "
+            "3–5 giây mỗi câu. Chữ đứng yên quá 20 giây (logo) chỉ được làm mờ, không dịch."
         ))
         lay.addWidget(opt)
         self._sync_fit()
@@ -96,15 +116,19 @@ class ClipsPage(QWidget):
 
     def _sync_fit(self) -> None:
         self.fit.setEnabled(self.aspect.currentData() != "original")
+        self.seconds.setEnabled(self.split.isChecked())
+        self.region.setEnabled(self.vietsub.isChecked())
 
     def _start(self) -> None:
         path = self.picker.path()
         params = {
             "path": path,
-            "segment_seconds": self.seconds.value(),
+            "segment_seconds": self.seconds.value() if self.split.isChecked() else 0,
             "aspect": self.aspect.currentData(),
             "fit": self.fit.currentData(),
             "output_dir": self.out.path(),
+            "vietsub": self.vietsub.isChecked(),
+            "vietsub_region": self.region.currentData(),
         }
         try:
             job = self.services.jobs.submit(KIND, f"Tạo clip {Path(path).name}", params)
@@ -112,7 +136,10 @@ class ClipsPage(QWidget):
             show_error(self, exc, "Không thể bắt đầu")
             return
         s = self.services.settings
-        s.clip_seconds, s.clip_aspect, s.clip_fit = params["segment_seconds"], params["aspect"], params["fit"]
+        if self.split.isChecked():
+            s.clip_seconds = params["segment_seconds"]
+        s.clip_split, s.clip_aspect, s.clip_fit = self.split.isChecked(), params["aspect"], params["fit"]
+        s.clip_vietsub, s.clip_vietsub_region = params["vietsub"], params["vietsub_region"]
         try:
             self.services.save_settings()
         except OSError:  # chỉ là ghi nhớ lựa chọn; tác vụ vẫn chạy
@@ -163,5 +190,18 @@ def render_result(r: dict) -> str:
         for f in r["files"]
     )
     total = sum(f["size_bytes"] for f in r["files"])
-    return (f"<p style='color:#1d5e2e'><b>Đã tạo {len(r['files'])} clip ({format_size(total)}), "
-            f"tất cả đã qua kiểm tra.</b></p><p>Thư mục: {e(r['output_dir'])}</p><table>{rows}</table>")
+    out = (f"<p style='color:#1d5e2e'><b>Đã tạo {len(r['files'])} clip ({format_size(total)}), "
+           f"tất cả đã qua kiểm tra.</b></p><p>Thư mục: {e(r['output_dir'])}</p>")
+    vs = r.get("vietsub")
+    if vs:
+        if not vs["lines"]:
+            out += "<p style='color:#8a5a00'><b>Không tìm thấy phụ đề tiếng Trung nào</b> trong vùng đã chọn — video giữ nguyên chữ.</p>"
+        else:
+            out += (f"<p>Việt hóa: dịch {vs['translated']}/{vs['lines']} câu bằng {e(vs['model'])}"
+                    + (f", {vs['static']} chữ đứng yên chỉ làm mờ" if vs["static"] else "")
+                    + f". Phụ đề: {e(Path(vs['srt_vi']).name)}, {e(Path(vs['srt_zh']).name)}.</p>"
+                    "<p style='color:#8a5a00'>Bản dịch máy — nên xem lại trước khi đăng.</p>")
+        if vs["failed"]:
+            out += ("<p style='color:#a11'><b>Không dịch được (chỉ làm mờ):</b> "
+                    + e("; ".join(vs["failed"][:10])) + ("…" if len(vs["failed"]) > 10 else "") + "</p>")
+    return out + f"<table>{rows}</table>"

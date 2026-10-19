@@ -26,7 +26,20 @@ class DependencyStatus:
 OPTIONAL_PACKAGES = [
     # (tên import, mô tả, lệnh cài)
     ("faster_whisper", "faster-whisper — nhận dạng giọng nói (Module B)", "uv sync --extra asr"),
+    ("rapidocr_onnxruntime", "RapidOCR — đọc phụ đề in trên hình (Việt hóa phụ đề)", "uv sync --extra vietsub"),
 ]
+
+
+def _ollama_status(settings: Settings) -> DependencyStatus:
+    from pas.core.errors import DependencyMissing
+    from pas.modules.vietsub.translate import OllamaClient
+
+    name = f"Ollama + mô hình {settings.translate_model} (dịch Trung → Việt)"
+    try:
+        OllamaClient(settings.ollama_url, settings.translate_model).ensure_ready()
+    except DependencyMissing as exc:
+        return DependencyStatus(name, False, exc.message, exc.hint or "", required=False)
+    return DependencyStatus(name, True, f"Sẵn sàng tại {settings.ollama_url}", required=False)
 
 
 def check_environment(settings: Settings, paths: AppPaths) -> list[DependencyStatus]:
@@ -56,8 +69,9 @@ def check_environment(settings: Settings, paths: AppPaths) -> list[DependencySta
         installed = importlib.util.find_spec(module) is not None
         results.append(DependencyStatus(
             desc, installed, "Đã cài" if installed else "Chưa cài",
-            "" if installed else f"Sẽ cài khi triển khai module tương ứng: `{install}`", required=False,
+            "" if installed else f"Cài khi cần dùng: `{install}`", required=False,
         ))
+    results.append(_ollama_status(settings))
 
     min_free = int(settings.min_free_disk_gb * GB)
     locations = [("Dữ liệu ứng dụng", paths.root)]
