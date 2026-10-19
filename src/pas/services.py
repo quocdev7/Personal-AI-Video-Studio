@@ -53,7 +53,7 @@ def build_services(data_dir: Path | None = None, start_jobs: bool = True) -> App
     jobs = JobManager(job_repo, registry, paths.temp_dir,
                       max_workers=settings.max_concurrent_jobs, keep_temp=settings.keep_temp_files)
     services = AppServices(paths, settings, db, ProjectRepository(db), job_repo, registry, jobs)
-    register_all(registry, services.ffmpeg_tools)
+    register_all(registry, services.ffmpeg_tools, lambda: services.settings)
     if start_jobs:
         jobs.start()
     log.info("Dữ liệu ứng dụng: %s", paths.root)

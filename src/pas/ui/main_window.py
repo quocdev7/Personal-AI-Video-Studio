@@ -10,6 +10,7 @@ from pas import APP_NAME, __version__
 from pas.jobs.models import JobEvent
 from pas.services import AppServices
 from pas.ui.bridge import JobEventBridge
+from pas.ui.pages.clips import ClipsPage
 from pas.ui.pages.dashboard import DashboardPage
 from pas.ui.pages.jobs_pages import HistoryPage, QueuePage
 from pas.ui.pages.media_check import MediaCheckPage
@@ -21,7 +22,7 @@ log = logging.getLogger(__name__)
 # Chức năng chưa có backend: hiển thị mờ, không bấm được, ghi rõ giai đoạn.
 PLANNED_PAGES = [
     ("Video → phụ đề", "Giai đoạn 3"),
-    ("Chia video", "Giai đoạn 4–5"),
+    ("Chia theo cảnh / nội dung", "Giai đoạn 4–5"),
     ("Xử lý âm thanh", "Giai đoạn 6"),
     ("Dịch & lồng tiếng", "Giai đoạn 6"),
 ]
@@ -38,11 +39,13 @@ class MainWindow(QMainWindow):
         self.dashboard = DashboardPage(services)
         self.projects = ProjectsPage(services)
         self.media_check = MediaCheckPage(services)
+        self.clips = ClipsPage(services)
         self.queue = QueuePage(services)
         self.history = HistoryPage(services)
         self.settings = SettingsPage(services)
         pages = [
             ("Tổng quan", self.dashboard),
+            ("Tạo clip ngắn", self.clips),
             ("Dự án", self.projects),
             ("Kiểm tra media", self.media_check),
             ("Hàng đợi", self.queue),
@@ -102,6 +105,7 @@ class MainWindow(QMainWindow):
         if self._closed:  # sự kiện queued đã nằm trong hàng đợi Qt trước khi ngắt kết nối
             return
         self.media_check.on_job_event(event)
+        self.clips.on_job_event(event)
         if not self._refresh_timer.isActive():
             self._refresh_timer.start()
 

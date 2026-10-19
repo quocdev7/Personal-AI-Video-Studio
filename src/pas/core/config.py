@@ -22,6 +22,10 @@ class Settings:
     max_concurrent_jobs: int = 1
     min_free_disk_gb: float = 2.0
     keep_temp_files: bool = False
+    # Lựa chọn gần nhất ở trang "Tạo clip ngắn".
+    clip_seconds: int = 60
+    clip_aspect: str = "9:16"
+    clip_fit: str = "blur"
 
     def validated(self) -> "Settings":
         if self.max_concurrent_jobs < 1:
@@ -30,6 +34,12 @@ class Settings:
             self.max_concurrent_jobs = 4
         if self.min_free_disk_gb < 0:
             self.min_free_disk_gb = 0.0
+        self.clip_seconds = min(max(self.clip_seconds, 5), 3600)
+        # Giá trị không hợp lệ (sửa tay file cấu hình) → về mặc định; danh sách gốc ở modules/clips/tasks.py.
+        if self.clip_aspect not in ("9:16", "1:1", "16:9", "original"):
+            self.clip_aspect = "9:16"
+        if self.clip_fit not in ("blur", "crop", "pad"):
+            self.clip_fit = "blur"
         return self
 
 

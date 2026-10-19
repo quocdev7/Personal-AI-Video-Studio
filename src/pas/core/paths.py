@@ -64,6 +64,17 @@ def unique_output_path(path: Path) -> Path:
         n += 1
 
 
+def unique_output_dir(path: Path) -> Path:
+    """Như unique_output_path nhưng cho thư mục: thêm ` (n)` vào cả tên (tên thư mục có thể chứa dấu chấm)."""
+    path = Path(path)
+    if not path.exists():
+        return path
+    n = 1
+    while (path.parent / f"{path.name} ({n})").exists():
+        n += 1
+    return path.parent / f"{path.name} ({n})"
+
+
 def _same_file(a: Path, b: Path) -> bool:
     try:
         return os.path.normcase(a.resolve()) == os.path.normcase(b.resolve())

@@ -11,6 +11,16 @@
 ## Các trang
 - **Tổng quan** — kiểm tra môi trường (Python, FFmpeg, thư viện tùy chọn, dung lượng trống) kèm cách khắc phục; số tác vụ
   theo trạng thái; cảnh báo nếu có tác vụ bị gián đoạn lần trước.
+- **Tạo clip ngắn** — thả một video vào → tự cắt thành nhiều clip và đổi khung. Các bước:
+  1. Kéo thả video vào ô *Chọn video* (hoặc bấm chọn file).
+  2. Chọn *Độ dài mỗi clip* (5–3600 giây, mặc định 60), *Khung hình* (9:16 cho TikTok/Shorts/Reels, 1:1, 16:9, giữ
+     nguyên) và *Lấp khung*: **nền mờ** (giữ toàn bộ hình, phần trống là ảnh mờ), **cắt** (lấp đầy, mất hai bên) hoặc
+     **viền đen**.
+  3. Bấm **Tạo clip**. Kết quả nằm trong thư mục mới `<tên video> - clip 9x16` cạnh video gốc (hoặc thư mục bạn chọn),
+     các file `<tên video> - phần 1.mp4`, `phần 2.mp4`... Bấm *Mở thư mục kết quả* để xem.
+  - Clip cuối ngắn hơn 30% độ dài clip được gộp vào clip trước. Mỗi clip được kiểm tra lại sau khi xuất.
+  - Trên máy chỉ có CPU, thời gian mã hóa khoảng 0,5–2 lần thời lượng video. Nếu tắt máy giữa chừng, vào *Hàng đợi* →
+    *Chạy lại*: các clip đã xong được giữ, chỉ làm tiếp phần còn lại.
 - **Dự án** — nhóm video theo dự án với thư mục đầu vào/đầu ra. "Xóa khỏi danh sách" chỉ xóa bản ghi, **không xóa file**.
 - **Kiểm tra media** — chọn hoặc kéo thả file video/âm thanh → *Bắt đầu kiểm tra*. Kết quả: định dạng, thời lượng,
   độ phân giải, tỷ lệ khung (16:9, 9:16...), FPS, luồng âm thanh và cảnh báo (không có tiếng, thiếu thời lượng...).

@@ -86,3 +86,29 @@ def test_projects_page_lists_projects(window):
     window.projects.refresh()
     assert window.projects.table.rowCount() == 1
     assert window.projects.table.item(0, 0).text() == "Dự án giao diện"
+
+
+@pytest.mark.ffmpeg
+def test_clips_from_ui(window, qtbot, ffmpeg_tools, tmp_path):
+    src = make_media(ffmpeg_tools, tmp_path / UNICODE_DIR / "clip giao diện.mp4", seconds=6)
+    page = window.clips
+    page.picker.set_path(str(src))
+    page.seconds.setValue(5)
+    page.aspect.setCurrentIndex(page.aspect.findData("1:1"))
+    assert not page.btn_open.isEnabled()
+    page.btn_start.click()
+    assert page.job_id is not None
+    qtbot.waitUntil(lambda: page.btn_open.isEnabled(), timeout=60000)
+    job = window.services.job_repo.get(page.job_id)
+    assert job.status == JobStatus.COMPLETED
+    assert len(job.result["files"]) == 1  # 6 s: đuôi 1 s được gộp
+    assert "Đã tạo 1 clip" in page.result.toPlainText()
+    # Lựa chọn được ghi nhớ cho lần sau
+    assert (window.services.settings.clip_seconds, window.services.settings.clip_aspect) == (5, "1:1")
+
+
+def test_clips_invalid_input_shows_error(window, monkeypatch):
+    shown = []
+    monkeypatch.setattr("pas.ui.pages.clips.show_error", lambda parent, exc, title: shown.append(exc))
+    window.clips.btn_start.click()
+    assert shown and window.clips.job_id is None

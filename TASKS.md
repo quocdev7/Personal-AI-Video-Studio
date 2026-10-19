@@ -2,7 +2,7 @@
 
 Trạng thái: **Đã test** = có test tự động chạy qua · **Đã làm, chưa test** · **Chưa làm** · **Bị chặn** (cần quyết định/tài nguyên).
 
-Lần chạy test gần nhất: 2026-10-19, `uv run pytest` → **72 passed, 0 skipped** (chạy 10 lần liên tiếp đều qua),
+Lần chạy test gần nhất: 2026-10-19, `uv run pytest` → **112 passed, 0 skipped**,
 Windows 11, Python 3.12.13, FFmpeg 9.0.2 (bản build Gyan).
 
 ## Giai đoạn 1 — Khảo sát & tài liệu
@@ -37,7 +37,19 @@ Windows 11, Python 3.12.13, FFmpeg 9.0.2 (bản build Gyan).
 | SRT/VTT/TXT + kiểm tra hợp lệ | Chưa làm |
 | Trình chỉnh sửa phụ đề | Chưa làm |
 
-## Giai đoạn 4–8
+## Giai đoạn 4 — Chia video (làm trước một phần theo yêu cầu "thả video vào là ra video mới")
+| Việc | Trạng thái |
+|---|---|
+| Tác vụ `video.clips`: cắt theo độ dài cố định, gộp đoạn đuôi ngắn | Đã test |
+| Đổi khung 9:16 / 1:1 / 16:9 / giữ nguyên; lấp khung nền mờ / cắt / viền đen | Đã test (FFmpeg thật) |
+| Xuất H.264/AAC MP4, kiểm tra từng clip sau khi xuất (codec, kích thước, âm thanh, thời lượng ±0,5 s) | Đã test |
+| Thư mục kết quả mới, không ghi đè; file gốc không đổi; kiểm tra dung lượng trước khi chạy | Đã test |
+| Hủy không để lại file dở; gián đoạn → chạy lại tiếp từ clip chưa xong | Đã test |
+| Trang "Tạo clip ngắn" (chạy từ UI, ghi nhớ lựa chọn, báo lỗi đầu vào) | Đã test (offscreen); ứng dụng khởi động không lỗi, **chưa thao tác thử bằng tay trên desktop** |
+| Phát hiện cảnh (`scdet`), xem trước và chỉnh điểm cắt | Chưa làm |
+| Video rất dài (> 1 giờ) | **Chưa test** |
+
+## Giai đoạn 5–8
 Chưa làm. Xem [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
 ## Bị chặn / rủi ro đã biết

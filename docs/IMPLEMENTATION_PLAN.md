@@ -30,6 +30,9 @@ Chia theo thời lượng cố định (cắt tại keyframe hoặc mã hóa l�
 xem trước điểm cắt, chỉnh tay, xuất hàng loạt MP4 (H.264/AAC), khung 16:9 / 9:16 / 1:1 (scale + pad/crop),
 kiểm tra file đầu ra bằng probe (Module F).
 
+**Tiến độ:** đã xong và test phần "Tạo clip ngắn" (chia theo thời lượng, mã hóa lại chính xác, đổi khung kèm nền mờ /
+cắt / viền đen, kiểm tra đầu ra, chạy tiếp sau gián đoạn). Còn lại: phát hiện cảnh, xem trước, chỉnh tay điểm cắt.
+
 ## Giai đoạn 5 — Chia theo nội dung (Module C3)
 Cần LLM cục bộ (Ollama hoặc llama.cpp + Qwen 2.5 instruct; giấy phép kiểm tra theo từng mô hình). Dựa trên phụ đề của
 Giai đoạn 3 để đề xuất ranh giới tập + tiêu đề; người dùng duyệt trước khi xuất. Trên CPU sẽ chậm — ước lượng thời gian

@@ -39,6 +39,7 @@ Test giao diện chạy với `QT_QPA_PLATFORM=offscreen`.
 | Hàng loạt | 5 tác vụ chạy đúng thứ tự | ✔ test_jobs | Đã chạy |
 | Dung lượng thấp | `ensure_free_space` báo lỗi kèm gợi ý | ✔ (giả lập yêu cầu lớn) | Đã chạy |
 | UI | Mở mọi trang, trang chưa làm bị vô hiệu, chạy kiểm tra media từ UI, lưu cài đặt, đóng không lỗi | ✔ test_ui | Đã chạy |
+| Tạo clip ngắn | Kế hoạch cắt (gộp đuôi, phủ đủ thời lượng), mọi tổ hợp khung × lấp khung, tham số sai, video không tiếng, thư mục trùng, dung lượng thấp, hủy không để file dở, chạy tiếp sau gián đoạn, chạy từ UI | ✔ test_clips, test_ui | Đã chạy |
 | Một phiên | Phiên thứ hai bị chặn; khóa cũ sau crash không chặn | Thủ công | Đã chạy 2026-10-19 |
 | Video dài (> 1 giờ) | Hiệu năng, bộ nhớ | ✖ | Chưa — làm ở GĐ3 khi có ASR |
 | Phụ đề SRT | Định dạng thời gian, round-trip | ✖ | Chưa — GĐ3 |
