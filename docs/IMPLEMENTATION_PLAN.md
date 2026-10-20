@@ -37,6 +37,11 @@ cắt / viền đen, kiểm tra đầu ra, chạy tiếp sau gián đoạn). Cò
 `pas.modules.vietsub`: OCR (RapidOCR) → dịch bằng Ollama + qwen2.5:7b → làm mờ vùng chữ + phụ đề ASS. Đã chọn LLM
 cục bộ cho dịch zh→vi (xem GĐ6). Còn lại: thử trên video thật, trình chỉnh bản dịch trước khi xuất.
 
+**Làm trước (theo yêu cầu):** Kiểm duyệt — tự làm mờ khỏa thân (NudeNet), bạo lực / máu me (CLIP zero-shot, che cả
+khung), chữ thô tục trên hình (OCR + danh sách từ) + báo cáo, gắn vào "Tạo clip ngắn" — module `pas.modules.safety`.
+Còn lại: thử trên video thật và chỉnh ngưỡng, xem trước / bỏ chọn từng đoạn trước khi xuất, cân nhắc thêm vũ khí và
+lời nói thô tục trong âm thanh (cần ASR của GĐ3).
+
 ## Giai đoạn 5 — Chia theo nội dung (Module C3)
 Cần LLM cục bộ (Ollama hoặc llama.cpp + Qwen 2.5 instruct; giấy phép kiểm tra theo từng mô hình). Dựa trên phụ đề của
 Giai đoạn 3 để đề xuất ranh giới tập + tiêu đề; người dùng duyệt trước khi xuất. Trên CPU sẽ chậm — ước lượng thời gian

@@ -2,9 +2,10 @@
 
 Trạng thái: **Đã test** = có test tự động chạy qua · **Đã làm, chưa test** · **Chưa làm** · **Bị chặn** (cần quyết định/tài nguyên).
 
-Lần chạy test gần nhất: 2026-10-19, `uv run pytest` → **148 passed, 1 skipped**
-(test gọi Ollama thật, chỉ chạy khi đặt `PAS_TEST_OLLAMA=1` — đã chạy riêng: passed),
-Windows 11, Python 3.12.13, FFmpeg 9.0.2 (bản build Gyan), RapidOCR 1.4.4, Ollama 0.40.5 + qwen2.5:7b.
+Lần chạy test gần nhất: 2026-10-20, `uv run pytest` → **180 passed, 1 skipped**
+(test gọi Ollama thật, chỉ chạy khi đặt `PAS_TEST_OLLAMA=1` — đã chạy riêng ngày 2026-10-19: passed),
+Windows 11, Python 3.12.13, FFmpeg 9.0.2 (bản build Gyan), RapidOCR 1.4.4, Ollama 0.40.5 + qwen2.5:7b,
+NudeNet 3.4.2, onnxruntime (CPU).
 
 ## Giai đoạn 1 — Khảo sát & tài liệu
 | Việc | Trạng thái |
@@ -68,6 +69,25 @@ Windows 11, Python 3.12.13, FFmpeg 9.0.2 (bản build Gyan), RapidOCR 1.4.4, Oll
 Tốc độ đo trên máy này (CPU): OCR ~16 s cho mỗi phút video 720p (vùng nửa dưới), ~30 s/phút (toàn khung);
 dịch ~3–5 s mỗi câu với qwen2.5:7b.
 
+## Kiểm duyệt: làm mờ nội dung dễ vi phạm tiêu chuẩn cộng đồng (gắn vào "Tạo clip ngắn")
+| Việc | Trạng thái |
+|---|---|
+| Khỏa thân (NudeNet 320n, chạy bằng onnxruntime, không cần OpenCV): che đúng vùng ngực nữ / sinh dục / mông / hậu môn lộ | Đã test: tiền/hậu xử lý khớp thư viện gốc (so trực tiếp với `nudenet` trên 5 kích thước ảnh + 17 ảnh mẫu ngoài repo: cùng lớp, cùng điểm, cùng hộp) |
+| Bạo lực / máu me (CLIP ViT-B/32 zero-shot, 1 khung/giây, cần ≥ 2 giây liên tiếp): che cả khung | Đã test (logic điểm + gom đoạn; mô hình thật trên 17 ảnh mẫu); **ngưỡng chỉ chỉnh trên 17 ảnh** |
+| Chữ thô tục trên hình (RapidOCR + danh sách từ, sửa được; Latin theo nguyên từ, CJK theo chuỗi con, chuẩn hóa NFC) | Đã test (unit + video qua FFmpeg) |
+| Thay từ thô tục bằng `***` trong phụ đề Việt hóa (ASS/SRT) | Đã test |
+| Mặt nạ làm mờ (video xám ghi qua pipe) → làm mờ mạnh đúng vùng, đúng lúc; cắt cùng chỗ với từng clip | Đã test: so điểm ảnh trong/ngoài vùng, trong/ngoài khoảng thời gian |
+| Báo cáo `<tên video> - kiểm duyệt.txt` (đoạn nào, loại gì, clip nào, những gì KHÔNG kiểm tra) + tóm tắt trên trang kết quả | Đã test |
+| Tải mô hình CLIP (89 MB, MIT) chỉ khi bấm nút và xác nhận; URL cố định theo commit; kiểm tra kích thước + SHA-256; hủy/lỗi không để file dở | Đã test (máy chủ HTTP cục bộ: thành công, sai SHA, sai kích thước, file thiếu, hủy, không kết nối được). **Chưa tải vào ứng dụng trên máy này** — cần bấm *Tải mô hình bạo lực…* |
+| Báo lỗi sớm khi thiếu thư viện / chưa tải mô hình; trang Tổng quan hiển thị trạng thái | Đã test |
+| Chạy lại sau gián đoạn: dùng lại kết quả quét đã lưu | Đã làm, **chưa có test gián đoạn riêng** |
+| UI: bật/tắt, chọn loại, tải mô hình (hỏi trước), sửa danh sách từ | Đã test (offscreen); **chưa thao tác bằng tay trên desktop** |
+| Thử trên video thật | **Chưa test** — chỉ có video tổng hợp + ảnh mẫu |
+| Vũ khí đứng yên, biểu tượng thù ghét, ma túy, lời nói thô tục trong âm thanh | Chưa làm (ngoài phạm vi đã chọn) |
+
+Tốc độ đo trên máy này (i5-14400, CPU), video 60 giây 720p: khỏa thân 7,8 s, bạo lực 5,3 s, chữ 9,1 s, cả ba 23 s
+(~2,6 lần nhanh hơn thời gian thực), chưa tính thời gian mã hóa clip.
+
 ## Giai đoạn 5–8
 Chưa làm. Xem [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
@@ -83,3 +103,12 @@ Chưa làm. Xem [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 - Trùng tên dự án tiếng Việt khác hoa/thường không bị chặn (SQLite NOCASE chỉ áp dụng ASCII) → so sánh `casefold` + chuẩn hóa NFC.
 - Đóng cửa sổ: timer làm mới truy vấn CSDL đã đóng → ngắt UI khỏi dịch vụ trước khi đóng.
 - Race trong hàng đợi: tác vụ đã RUNNING trong CSDL nhưng chưa đăng ký control (không hủy được, `wait_idle` sai) → nhận và đăng ký trong cùng một khóa.
+
+## Sửa lỗi phát hiện khi test (Kiểm duyệt)
+- Kết quả NudeNet viết lại khác thư viện gốc → 3 nguyên nhân: PIL thu nhỏ có khử răng cưa (thư viện gốc dùng cv2
+  INTER_LINEAR) → tự viết nội suy song tuyến như cv2; mô hình thực tế nhận ảnh **BGR** (nudenet đảo kênh hai lần)
+  → đưa BGR; NMS phải chạy trên hộp đã cắt vào khung → cắt trước.
+- Nhiều mô hình onnxruntime chạy xen kẽ (NudeNet, CLIP, 3 phiên RapidOCR) → luồng chờ kiểu "spin" giành CPU của nhau:
+  quét chữ 46–57 s và dao động mạnh cho 60 s video, cả ba loại 133 s. Tắt spin cho phiên của ứng dụng và cho RapidOCR
+  (thư viện không có tùy chọn → tạm thay hàm tạo SessionOptions lúc khởi tạo) → chữ 9 s, cả ba 23 s, ổn định.
+  Việt hóa phụ đề dùng chung `load_engine` nên cũng được hưởng lợi.

@@ -1,7 +1,8 @@
 """Tác vụ "Tạo clip ngắn": thả một video vào → nhiều clip MP4 (H.264/AAC) cùng độ dài, khung 9:16 / 1:1 / 16:9.
 
-Các bước: probe → lập kế hoạch cắt → kiểm tra dung lượng → [Việt hóa: OCR chữ Trung → dịch → SRT] → mã hóa từng clip
-(kèm làm mờ chữ Trung + phụ đề Việt nếu bật) → kiểm tra file đầu ra.
+Các bước: probe → lập kế hoạch cắt → kiểm tra dung lượng → [Kiểm duyệt: quét khỏa thân / bạo lực / chữ thô tục →
+mặt nạ làm mờ + báo cáo] → [Việt hóa: OCR chữ Trung → dịch → SRT] → mã hóa từng clip (kèm làm mờ + phụ đề Việt nếu
+bật) → kiểm tra file đầu ra.
 - `segment_seconds = 0`: không cắt, xuất nguyên video (dùng khi chỉ cần Việt hóa / đổi khung).
 - Mỗi clip ghi ra `*.mp4.part` rồi mới đổi tên: không bao giờ để lại file MP4 dở dang.
 - Tiến độ lưu ở thư mục tạm của tác vụ (được giữ khi lỗi/gián đoạn): "Chạy lại" bỏ qua clip đã xong.
@@ -18,12 +19,18 @@ from pathlib import Path
 from typing import Callable
 
 from pas.core.config import Settings
+from pas.core.paths import AppPaths
 from pas.core.disk import GB, ensure_free_space
 from pas.core.errors import ExternalToolError, InvalidInput
 from pas.core.paths import ensure_not_source, unique_output_dir
 from pas.jobs.context import JobContext
 from pas.jobs.registry import TaskRegistry, TaskSpec
 from pas.media.ffmpeg import FFmpegTools, MediaInfo, probe, run_ffmpeg
+from pas.modules.safety import mask as sf_mask
+from pas.modules.safety import models as sf_models
+from pas.modules.safety import report as sf_report
+from pas.modules.safety import scan as sf_scan
+from pas.modules.safety.words import WordFilter, word_list_path
 from pas.modules.vietsub import ocr as vs_ocr
 from pas.modules.vietsub import render as vs_render
 from pas.modules.vietsub.translate import OllamaClient, translate_lines
@@ -106,10 +113,14 @@ def video_filter(aspect: str, fit: str, src: str = "[0:v:0]", out: str = "[v]") 
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1{out}")
 
 
-def vietsub_filter(aspect: str, fit: str, groups: list, ass_name: str | None) -> str:
-    """Làm mờ vùng chữ Trung (khung gốc) → đổi khung → vẽ phụ đề Việt (khung đầu ra)."""
+def vietsub_filter(aspect: str, fit: str, groups: list, ass_name: str | None,
+                   safety_size: tuple[int, int] | None = None) -> str:
+    """[Kiểm duyệt: mặt nạ ở đầu vào 1] → làm mờ vùng chữ Trung (khung gốc) → đổi khung → vẽ phụ đề Việt (khung đầu ra)."""
     chain = []
     src = "[0:v:0]"
+    if safety_size:
+        chain.append(sf_mask.safety_graph(*safety_size, src, "[1:v]", "[vsafe]"))
+        src = "[vsafe]"
     if groups:
         chain.append(vs_render.blur_graph(groups, src, "[vblur]"))
         src = "[vblur]"
@@ -121,11 +132,14 @@ def vietsub_filter(aspect: str, fit: str, groups: list, ass_name: str | None) ->
     return ";".join(chain)
 
 
-def encode_args(src: Path, seg: Segment, aspect: str, fit: str, out: Path, filter_script: str | None = None) -> list[str]:
-    """`filter_script`: tên file chứa filter_complex (tương đối với cwd của ffmpeg) — dùng khi bộ lọc dài."""
+def encode_args(src: Path, seg: Segment, aspect: str, fit: str, out: Path, filter_script: str | None = None,
+                mask: str | None = None) -> list[str]:
+    """`filter_script`: tên file chứa filter_complex (tương đối với cwd của ffmpeg) — dùng khi bộ lọc dài.
+    `mask`: video mặt nạ kiểm duyệt (đầu vào 1, cắt cùng chỗ với video gốc)."""
     graph = ["-/filter_complex", filter_script] if filter_script else ["-filter_complex", video_filter(aspect, fit)]
+    extra = ["-ss", f"{seg.start:.3f}", "-i", mask] if mask else []
     return [
-        "-ss", f"{seg.start:.3f}", "-i", str(src), "-t", f"{seg.duration:.3f}",
+        "-ss", f"{seg.start:.3f}", "-i", str(src), *extra, "-t", f"{seg.duration:.3f}",
         *graph,
         "-map", "[v]", "-map", "0:a:0?",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p",
@@ -186,6 +200,14 @@ def validate(params: dict) -> None:
         raise InvalidInput("Tùy chọn Việt hóa phụ đề không hợp lệ.")
     if params.get("vietsub") and params.get("vietsub_region", "bottom") not in vs_ocr.REGIONS:
         raise InvalidInput(f"Vùng tìm phụ đề không hợp lệ: {params.get('vietsub_region')!r}")
+    safety = params.get("safety")
+    if safety is not None:
+        if (not isinstance(safety, dict) or set(safety) - set(sf_scan.KINDS)
+                or not all(isinstance(v, bool) for v in safety.values())):
+            raise InvalidInput("Tùy chọn kiểm duyệt không hợp lệ.")
+        if not any(safety.values()):
+            raise InvalidInput("Đã bật kiểm duyệt nhưng chưa chọn mục nào.",
+                               "Chọn ít nhất một: khỏa thân, bạo lực / máu me, chữ thô tục — hoặc tắt kiểm duyệt.")
     if params.get("aspect") not in ASPECTS:
         raise InvalidInput(f"Khung hình không hợp lệ: {params.get('aspect')!r}")
     if params.get("fit") not in FITS:
@@ -215,8 +237,10 @@ def _save_state(path: Path, state: dict) -> None:
 
 def _vietsub_prepare(ctx: JobContext, src: Path, info: MediaInfo, tools: FFmpegTools, state: dict, state_file: Path,
                      out_dir: Path, client: OllamaClient, engine,
-                     progress: tuple[float, float, float]) -> tuple[list[vs_ocr.SubEvent], dict]:
-    """OCR → dịch → ghi SRT. Kết quả từng bước lưu vào state để "Chạy lại" không làm lại từ đầu."""
+                     progress: tuple[float, float, float],
+                     words: WordFilter | None = None) -> tuple[list[vs_ocr.SubEvent], dict]:
+    """OCR → dịch → ghi SRT. Kết quả từng bước lưu vào state để "Chạy lại" không làm lại từ đầu.
+    `words`: có thì từ thô tục trong phụ đề (Việt và Trung) được thay bằng *** (không đổi dữ liệu đã lưu)."""
     p0, p1, p2 = progress
     region = ctx.params.get("vietsub_region", "bottom")
     if "vietsub_events" in state:
@@ -251,6 +275,16 @@ def _vietsub_prepare(ctx: JobContext, src: Path, info: MediaInfo, tools: FFmpegT
         ctx.log(f"{len(failed)} câu không dịch được (vẫn được làm mờ, không có phụ đề Việt): "
                 + "; ".join(events[i].text for i in failed[:10]), "WARNING")
 
+    masked = 0
+    if words is not None:
+        for e in events:
+            vi, zh = words.mask(e.vi) if e.vi else e.vi, words.mask(e.text)
+            if (vi, zh) != (e.vi, e.text) and not e.static:
+                masked += 1
+            e.vi, e.text = vi, zh
+        if masked:
+            ctx.log(f"Đã thay từ thô tục bằng *** trong {masked} câu phụ đề")
+
     srt: dict[str, str] = {}
     if lines:
         for lang in ("vi", "zh"):
@@ -260,16 +294,72 @@ def _vietsub_prepare(ctx: JobContext, src: Path, info: MediaInfo, tools: FFmpegT
             srt[lang] = str(path)
     summary = {"lines": len(lines), "translated": len(lines) - len(failed), "static": static,
                "failed": [events[i].text for i in failed], "region": region, "model": client.model,
-               "srt_vi": srt.get("vi"), "srt_zh": srt.get("zh")}
+               "srt_vi": srt.get("vi"), "srt_zh": srt.get("zh"), "masked": masked}
     return events, summary
 
 
-def make_handler(tools_provider: Callable[[], FFmpegTools], settings_provider: Callable[[], Settings]):
+def _safety_prepare(ctx: JobContext, src: Path, info: MediaInfo, tools: FFmpegTools, state: dict, state_file: Path,
+                    detectors: dict, progress: tuple[float, float]) -> list[sf_scan.Detection]:
+    """Quét kiểm duyệt (kết quả lưu vào state) → ghi mặt nạ vào thư mục tạm nếu có gì cần che."""
+    p0, p1 = progress
+    v = info.video[0]
+    if "safety_dets" in state:
+        dets = [sf_scan.Detection.from_dict(d) for d in state["safety_dets"]]
+        ctx.log(f"Dùng lại kết quả kiểm duyệt từ lần chạy trước ({len(dets)} lần phát hiện)")
+    else:
+        ctx.report(p0, "Đang kiểm duyệt nội dung (khỏa thân / bạo lực / chữ thô tục)")
+        dets = sf_scan.scan_video(src, tools, v.width, v.height, info.duration, ctx, ctx.sub_progress(p0, p1),
+                                  **detectors)
+        state["safety_dets"] = [d.to_dict() for d in dets]
+        _save_state(state_file, state)
+    mask = ctx.temp_dir / sf_mask.MASK_FILE
+    if dets and not mask.is_file():
+        ctx.report(p1, "Đang tạo mặt nạ làm mờ")
+        part = mask.with_name("safety_mask.part.mkv")
+        try:
+            sf_mask.write_mask(part, tools, dets, info.duration, v.width, v.height, ctx)
+            os.replace(part, mask)
+        finally:
+            part.unlink(missing_ok=True)
+    s = sf_report.summarize(dets, info.duration)
+    ctx.log("Kiểm duyệt: " + (", ".join(f"{sf_scan.KINDS[k]} {n} đoạn ({s['seconds'][k]:g}s)"
+                                          for k, n in s["counts"].items() if n) or "không phát hiện gì cần che"))
+    return dets
+
+
+def _load_detectors(opts: dict[str, bool], models_dir: Path, app_root: Path, ctx: JobContext) -> dict:
+    """Nạp mô hình được chọn. Thiếu thư viện / chưa tải mô hình → báo ngay, trước khi tốn thời gian."""
+    from pas.modules.safety import detect as sf_detect
+
+    sf_models.require_runtime()
+    out: dict = {}
+    if opts.get("nudity"):
+        out["nudity"] = sf_detect.NudityDetector(sf_models.nudenet_model(), sf_scan.NUDITY_THRESHOLD)
+    if opts.get("violence"):
+        path = sf_models.require_model(models_dir, sf_models.CLIP_VISION)
+        out["violence"] = sf_detect.ViolenceClassifier(path, sf_scan.VIOLENCE_THRESHOLD)
+    if opts.get("text"):
+        out["ocr_engine"] = vs_ocr.load_engine()
+        wl = word_list_path(app_root)
+        out["words"] = WordFilter.load(wl)
+        ctx.log(f"Danh sách từ cấm: {wl} ({len(out['words'].words)} mục)")
+    return out
+
+
+def _overlaps(dets: list[sf_scan.Detection], seg: Segment) -> bool:
+    end = seg.start + seg.duration
+    return any(d.t + d.hold > seg.start and d.t - d.hold < end for d in dets)
+
+
+def make_handler(tools_provider: Callable[[], FFmpegTools], settings_provider: Callable[[], Settings],
+                 paths: AppPaths | None = None):
     def run(ctx: JobContext) -> dict:
         p = ctx.params
         src = Path(p["path"])
         aspect, fit, seconds = p["aspect"], p["fit"], float(p["segment_seconds"])
         vietsub = bool(p.get("vietsub", False))
+        safety_opts = {k: bool(v) for k, v in (p.get("safety") or {}).items()}
+        safety = any(safety_opts.values())
         settings = settings_provider()
 
         ctx.report(0.01, "Đang đọc thông tin video")
@@ -283,8 +373,14 @@ def make_handler(tools_provider: Callable[[], FFmpegTools], settings_provider: C
         segments = plan_segments(info.duration, seconds)
         ctx.log(f"Video {info.duration:.2f}s → {len(segments)} clip"
                 + (f" ~{seconds:g}s" if seconds else " (không cắt)") + f", khung {aspect}, {fit}"
-                + (", Việt hóa phụ đề" if vietsub else ""))
+                + (", Việt hóa phụ đề" if vietsub else "")
+                + (", kiểm duyệt: " + ", ".join(sf_scan.KINDS[k] for k, on in safety_opts.items() if on) if safety else ""))
 
+        detectors: dict = {}
+        if safety:
+            if paths is None:
+                raise InvalidInput("Kiểm duyệt chưa được cấu hình trong ứng dụng (thiếu thư mục dữ liệu).")
+            detectors = _load_detectors(safety_opts, paths.models_dir, paths.root, ctx)
         engine = client = None
         if vietsub:  # kiểm tra trước khi tốn thời gian: thiếu thư viện / Ollama / mô hình → báo ngay
             engine = vs_ocr.load_engine()
@@ -309,14 +405,29 @@ def make_handler(tools_provider: Callable[[], FFmpegTools], settings_provider: C
         out_dir.mkdir(parents=True, exist_ok=True)
         _save_state(state_file, state)
 
+        v = info.video[0]
+        dets: list[sf_scan.Detection] = []
+        safety_summary = None
+        enc0 = 0.03
+        if safety:
+            sp = (0.03, 0.25) if vietsub else (0.03, 0.40)
+            dets = _safety_prepare(ctx, src, info, tools, state, state_file, detectors, sp)
+            enc0 = sp[1]
         events: list[vs_ocr.SubEvent] = []
         vs_summary = None
-        enc0 = 0.03
         if vietsub:
+            vp = (0.25, 0.38, 0.55) if safety else (0.03, 0.30, 0.50)
             events, vs_summary = _vietsub_prepare(ctx, src, info, tools, state, state_file, out_dir,
-                                                  client, engine, (0.03, 0.30, 0.50))
-            enc0 = 0.50
-        v = info.video[0]
+                                                  client, engine, vp, detectors.get("words"))
+            enc0 = vp[2]
+        if safety:
+            report_path = out_dir / f"{src.stem} - kiểm duyệt.txt"
+            ensure_not_source(report_path, src)
+            vs_render.write_text_atomic(report_path, sf_report.build_report(
+                src.name, safety_opts, dets, info.duration, segments,
+                vs_summary["masked"] if vs_summary else 0))
+            safety_summary = {**sf_report.summarize(dets, info.duration), "enabled": safety_opts,
+                              "report": str(report_path)}
         fit_map = vs_render.fit_transform(v.width, v.height, ASPECTS[aspect], fit)
 
         width = len(str(len(segments)))
@@ -335,19 +446,24 @@ def make_handler(tools_provider: Callable[[], FFmpegTools], settings_provider: C
                 ctx.report(start_p, f"Đang tạo clip {seg.index}/{len(segments)}")
                 if final.exists():  # file trùng tên không do tác vụ này tạo: không ghi đè
                     raise InvalidInput(f"Đã có file {final}.", "Chuyển file đó đi hoặc chọn thư mục đầu ra khác.")
-                script = None
-                if vietsub:
-                    items = vs_render.local_events(events, seg.start, seg.duration)
-                    groups = vs_render.blur_groups(items, v.width, v.height)
-                    ass_name = None
-                    if any(e.vi and not e.static for e, _, _ in items):
-                        ass_name = f"seg{seg.index:04d}.ass"
-                        (ctx.temp_dir / ass_name).write_text(vs_render.build_ass(items, fit_map), encoding="utf-8")
+                script = mask = None
+                if vietsub or safety:
+                    groups, ass_name = [], None
+                    if vietsub:
+                        items = vs_render.local_events(events, seg.start, seg.duration)
+                        groups = vs_render.blur_groups(items, v.width, v.height)
+                        if any(e.vi and not e.static for e, _, _ in items):
+                            ass_name = f"seg{seg.index:04d}.ass"
+                            (ctx.temp_dir / ass_name).write_text(vs_render.build_ass(items, fit_map), encoding="utf-8")
+                    if safety and _overlaps(dets, seg):
+                        mask = sf_mask.MASK_FILE
                     script = f"seg{seg.index:04d}.filter"
-                    (ctx.temp_dir / script).write_text(vietsub_filter(aspect, fit, groups, ass_name), encoding="utf-8")
+                    (ctx.temp_dir / script).write_text(
+                        vietsub_filter(aspect, fit, groups, ass_name, (v.width, v.height) if mask else None),
+                        encoding="utf-8")
                 part = final.with_name(final.name + ".part")
                 try:
-                    run_ffmpeg(tools, encode_args(src, seg, aspect, fit, part, script), ctx, seg.duration,
+                    run_ffmpeg(tools, encode_args(src, seg, aspect, fit, part, script, mask), ctx, seg.duration,
                                ctx.sub_progress(start_p, end_p), cwd=ctx.temp_dir)
                     out_info = verify_output(part, tools, seg, aspect, info.has_audio)
                     os.replace(part, final)
@@ -362,11 +478,11 @@ def make_handler(tools_provider: Callable[[], FFmpegTools], settings_provider: C
         ctx.report(1.0, f"Đã tạo {len(files)} clip")
         return {"source": str(src), "output_dir": str(out_dir), "aspect": aspect, "fit": fit,
                 "segment_seconds": seconds, "source_duration": info.duration, "files": files,
-                "vietsub": vs_summary}
+                "vietsub": vs_summary, "safety": safety_summary}
 
     return run
 
 
 def register(registry: TaskRegistry, tools_provider: Callable[[], FFmpegTools],
-             settings_provider: Callable[[], Settings]) -> None:
-    registry.register(TaskSpec(KIND, "Tạo clip ngắn", make_handler(tools_provider, settings_provider), validate))
+             settings_provider: Callable[[], Settings], paths: AppPaths | None = None) -> None:
+    registry.register(TaskSpec(KIND, "Tạo clip ngắn", make_handler(tools_provider, settings_provider, paths), validate))

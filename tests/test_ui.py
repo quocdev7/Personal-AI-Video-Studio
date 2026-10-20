@@ -143,3 +143,52 @@ def test_render_result_vietsub():
                                               "srt_zh": "D:/ra/a - zh.srt"}})
     assert "dịch 2/3 câu" in html and "a - vi.srt" in html and "&lt;坏&gt;" in html
     assert "vietsub" not in render_result({**base, "vietsub": None})
+
+
+def test_clips_safety_options(window, monkeypatch, tmp_path):
+    page = window.clips
+    assert not page.safety_kinds["nudity"].isEnabled()  # tắt kiểm duyệt → các mục con bị khóa
+    page.safety.setChecked(True)
+    assert all(cb.isEnabled() for cb in page.safety_kinds.values())
+    assert not page.btn_model.isHidden() and "chưa tải" in page.model_status.text()  # thư mục dữ liệu mới: chưa có CLIP
+    page.safety_kinds["violence"].setChecked(False)
+    submitted = []
+    monkeypatch.setattr(window.services.jobs, "submit",
+                        lambda kind, title, params: submitted.append(params) or type("J", (), {"id": 1})())
+    page.picker.set_path(str(tmp_path / "v.mp4"))
+    page.btn_start.click()
+    [p] = submitted
+    assert p["safety"] == {"nudity": True, "violence": False, "text": True}
+    s = window.services.settings
+    assert (s.clip_safety, s.clip_safety_violence) == (True, False)
+
+
+def test_clips_download_model_asks_first(window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    page = window.clips
+    page.safety.setChecked(True)
+    submitted = []
+    monkeypatch.setattr(window.services.jobs, "submit",
+                        lambda kind, title, params: submitted.append((kind, params)) or type("J", (), {"id": 7})())
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.No)
+    page.btn_model.click()
+    assert submitted == []  # người dùng từ chối → không tải
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    page.btn_model.click()
+    assert submitted == [("model.download", {"model": "clip-vit-b32-vision"})]
+    assert page.download_id == 7 and not page.btn_model.isEnabled()
+
+
+def test_render_result_safety():
+    from pas.ui.pages.clips import render_result
+
+    base = {"output_dir": "D:/ra", "files": [], "vietsub": None}
+    sf = {"counts": {"nudity": 1, "violence": 0, "text": 0}, "seconds": {}, "enabled": {"nudity": True},
+          "report": "D:/ra/a - kiểm duyệt.txt",
+          "intervals": [{"kind": "nudity", "start": 1.5, "end": 3.0, "labels": ["<mông lộ>"], "score": 0.9}]}
+    html = render_result({**base, "safety": sf})
+    assert "đã làm mờ 1 đoạn" in html and "0:01.5–0:03.0" in html and "&lt;mông lộ&gt;" in html
+    assert "a - kiểm duyệt.txt" in html and "không bảo đảm" in html
+    none = render_result({**base, "safety": {**sf, "intervals": [], "counts": {"nudity": 0}}})
+    assert "không phát hiện đoạn nào" in none

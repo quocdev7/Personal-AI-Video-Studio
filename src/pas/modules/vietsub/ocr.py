@@ -10,15 +10,15 @@ from __future__ import annotations
 import difflib
 import logging
 import re
-import subprocess
-import threading
-from collections import Counter, deque
+from collections import Counter
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from pas.core.errors import DependencyMissing, ExternalToolError
-from pas.media.ffmpeg import CREATE_NO_WINDOW, FFmpegTools
+from pas.core.errors import DependencyMissing
+from pas.media.ffmpeg import FFmpegTools
+from pas.media.frames import iter_frames
 
 if TYPE_CHECKING:
     import numpy as np
@@ -240,15 +240,48 @@ def load_engine():
     except ImportError as exc:
         raise DependencyMissing("Chưa cài thư viện nhận dạng chữ (RapidOCR).", INSTALL_HINT) from exc
     # det_limit_type 'max': không phóng to dải ảnh dẹt (mặc định 'min' phóng 1280×290 lên 3264×736, chậm 20 lần).
-    return RapidOCR(det_limit_type="max", det_limit_side_len=MAX_SAMPLE_WIDTH)
+    with _no_spinning():
+        return RapidOCR(det_limit_type="max", det_limit_side_len=MAX_SAMPLE_WIDTH)
+
+
+@contextmanager
+def _no_spinning():
+    """Tắt luồng chờ kiểu "spin" của onnxruntime cho 3 phiên det/cls/rec của RapidOCR (thư viện không có tùy chọn này).
+
+    Ba phiên chạy nối tiếp, mỗi phiên giữ nguyên bộ luồng quay chờ → giành CPU của nhau: đo trên i5-14400 với video
+    60 giây, quét chữ mất 46–57 giây khi bật spin, 6–9 giây khi tắt. Không tìm thấy điểm móc (bản RapidOCR khác) thì
+    giữ nguyên hành vi mặc định.
+    """
+    try:
+        from rapidocr_onnxruntime.utils import infer_engine
+        cls = infer_engine.OrtInferSession
+        orig = cls.__dict__["_init_sess_opts"].__func__
+    except (ImportError, AttributeError, KeyError):
+        yield
+        return
+
+    def init_sess_opts(config):
+        opts = orig(config)
+        opts.add_session_config_entry("session.intra_op.allow_spinning", "0")
+        return opts
+
+    cls._init_sess_opts = staticmethod(init_sess_opts)
+    try:
+        yield
+    finally:
+        cls._init_sess_opts = staticmethod(orig)
 
 
 class FrameOCR:
-    """OCR từng khung, nhớ khung trước để bỏ qua bước nhận dạng khi chữ không đổi."""
+    """OCR từng khung, nhớ khung trước để bỏ qua bước nhận dạng khi chữ không đổi.
 
-    def __init__(self, engine, geo: SampleGeometry):
+    `keep`: dòng nào được trả về (mặc định: có chữ Trung). Kiểm duyệt dùng `keep=lambda t: True` để đọc mọi chữ.
+    """
+
+    def __init__(self, engine, geo: SampleGeometry, keep: Callable[[str], bool] = has_cjk):
         self.engine = engine
         self.geo = geo
+        self.keep = keep
         self._prev: list[tuple[Box, "np.ndarray", str, float]] = []  # box mẫu, ảnh xám vùng chữ, chữ, điểm
         self.rec_calls = 0
         self.min_h = MIN_LINE_HEIGHT_RATIO * geo.src_h / geo.scale
@@ -284,7 +317,7 @@ class FrameOCR:
                 text, score = reused
             current.append((box, gray, text, score))
             text = text.strip()
-            if score >= MIN_SCORE and has_cjk(text):
+            if score >= MIN_SCORE and text and self.keep(text):
                 sx0, sy0 = self.geo.to_source(x0, y0)
                 sx1, sy1 = self.geo.to_source(x1, y1)
                 lines.append(Line(text, round(score, 3), (sx0, sy0, sx1, sy1)))
@@ -314,67 +347,21 @@ def scan_video(
     engine=None,
 ) -> list[SubEvent]:
     """Đọc toàn bộ video, trả về các sự kiện phụ đề tiếng Trung (tọa độ video gốc)."""
-    import numpy as np
-
-    from pas.core.errors import JobCancelled
-
     engine = engine or load_engine()
     geo = sample_geometry(width, height, region)
     ocr = FrameOCR(engine, geo)
     vf = (f"fps={SAMPLE_FPS:g},crop={geo.src_w}:{geo.height}:0:{geo.y0},"
           f"scale={geo.out_w}:{geo.out_h}:flags=area,format=bgr24")
-    cmd = [str(tools.ffmpeg), "-hide_banner", "-nostdin", "-loglevel", "error", "-i", str(src),
-           "-map", "0:v:0", "-vf", vf, "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"]
-    log.info("OCR: %s", subprocess.list2cmdline(cmd))
-    frame_bytes = geo.out_w * geo.out_h * 3
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
-                            creationflags=CREATE_NO_WINDOW, bufsize=frame_bytes * 2)
-    stderr_tail: deque[str] = deque(maxlen=20)
-
-    def _drain():
-        assert proc.stderr is not None
-        for raw in proc.stderr:
-            stderr_tail.append(raw.decode("utf-8", "replace").rstrip())
-
-    t = threading.Thread(target=_drain, name="ocr-ffmpeg-stderr", daemon=True)
-    t.start()
-    if ctx is not None:
-        ctx.attach_process(proc)
     frames: list[tuple[int, list[Line]]] = []
     total_frames = max(1, int(duration * SAMPLE_FPS))
     idx = 0
-    try:
-        assert proc.stdout is not None
-        while True:
-            if ctx is not None:
-                ctx.checkpoint()
-            buf = proc.stdout.read(frame_bytes)
-            if len(buf) < frame_bytes:
-                break
-            img = np.frombuffer(buf, dtype=np.uint8).reshape(geo.out_h, geo.out_w, 3)
-            lines = ocr(img)
-            if lines:
-                frames.append((idx, lines))
-            idx += 1
-            if on_progress and idx % 4 == 0:
-                on_progress(min(1.0, idx / total_frames))
-        proc.wait()
-    finally:
-        if proc.poll() is None:
-            try:
-                proc.kill()
-            except OSError:
-                pass
-            proc.wait()
-        if ctx is not None:
-            ctx.detach_process(proc)
-        t.join(timeout=5)
-    if ctx is not None and ctx.is_cancelled:
-        raise JobCancelled()
-    if proc.returncode != 0:
-        tail = list(stderr_tail)[-1:] or ["không rõ"]
-        raise ExternalToolError(f"FFmpeg lỗi khi đọc khung hình để nhận dạng chữ: {tail[0]}",
-                                "File video có thể hỏng. Thử mở bằng trình phát video.")
+    for img in iter_frames(src, tools, vf, geo.out_w, geo.out_h, ctx, "nhận dạng chữ"):
+        lines = ocr(img)
+        if lines:
+            frames.append((idx, lines))
+        idx += 1
+        if on_progress and idx % 4 == 0:
+            on_progress(min(1.0, idx / total_frames))
     events = group_events(frames, SAMPLE_FPS)
     log.info("OCR %d khung, %d lần nhận dạng, %d sự kiện", idx, ocr.rec_calls, len(events))
     return events

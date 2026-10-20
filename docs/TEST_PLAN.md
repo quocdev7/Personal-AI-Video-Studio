@@ -43,6 +43,9 @@ Test giao diện chạy với `QT_QPA_PLATFORM=offscreen`.
 | Việt hóa phụ đề | Gom khung → câu (2 dòng, sót khung, nhiễu OCR, logo), lọc bản dịch (còn chữ Hán, id sai), dịch lại câu lỗi, Ollama giả qua HTTP (thiếu mô hình, không kết nối), bộ lọc làm mờ/ASS/SRT, chạy thật OCR + FFmpeg trên video drawtext: OCR lại đầu ra không còn chữ Trung (khung gốc, 9:16), ngoài lúc có chữ không bị làm mờ, file gốc không đổi; báo lỗi sớm khi thiếu Ollama | ✔ test_vietsub, test_ui | Đã chạy |
 | Việt hóa — Ollama thật | 2 câu qua qwen2.5:7b, không còn chữ Hán | ✔ `PAS_TEST_OLLAMA=1` | Đã chạy 2026-10-19 (mặc định bỏ qua vì chậm) |
 | Việt hóa — video thật | Nền phức tạp, nhiều kiểu chữ, chất lượng dịch | ✖ | Chưa — cần video mẫu của người dùng |
+| Kiểm duyệt | NMS, hậu xử lý NudeNet, tiền xử lý so trực tiếp với `nudenet` gốc (5 kích thước, sai lệch ≤ 1/255; skip nếu không có cv2/nudenet), điểm CLIP + gom đoạn bạo lực, danh sách từ (CJK/Latin/NFD, bản của người dùng), mặt nạ + bộ lọc FFmpeg, báo cáo, tải mô hình qua HTTP cục bộ (thành công, sai SHA/kích thước, file thiếu, hủy, không kết nối), chạy thật FFmpeg với bộ nhận diện giả theo thời gian: đúng khoảng che, điểm ảnh trong/ngoài vùng, clip thứ 2 che cả khung, file gốc không đổi, xóa thư mục tạm; báo lỗi sớm khi thiếu mô hình; phiên RapidOCR tắt spin | ✔ test_safety, test_ui | Đã chạy 2026-10-20 |
+| Kiểm duyệt — mô hình thật | NudeNet so với thư viện gốc trên 17 ảnh mẫu (ngoài repo): cùng lớp/điểm/hộp; CLIP phân biệt 17 ảnh mẫu; đo tốc độ trên video 60 s | Script thủ công (ngoài repo) | Đã chạy 2026-10-20 |
+| Kiểm duyệt — video thật | Tỷ lệ sót / che nhầm trên nội dung thật | ✖ | Chưa — cần video mẫu của người dùng |
 | Một phiên | Phiên thứ hai bị chặn; khóa cũ sau crash không chặn | Thủ công | Đã chạy 2026-10-19 |
 | Video dài (> 1 giờ) | Hiệu năng, bộ nhớ | ✖ | Chưa — làm ở GĐ3 khi có ASR |
 | Phụ đề SRT | Định dạng thời gian, round-trip | ✖ | Chưa — GĐ3 |

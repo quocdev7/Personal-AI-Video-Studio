@@ -1,7 +1,8 @@
 # Hướng dẫn sử dụng — Personal AI Studio 0.1.0
 
-> Phiên bản này là **nền tảng**: quản lý dự án, hàng đợi tác vụ và kiểm tra media. Tạo phụ đề, chia video, xử lý âm
-> thanh và dịch/lồng tiếng sẽ có ở các bản sau (các mục này hiển thị mờ trong menu).
+> Phiên bản này gồm **nền tảng** (dự án, hàng đợi tác vụ, kiểm tra media) và **Tạo clip ngắn** (cắt + đổi khung,
+> tùy chọn Việt hóa phụ đề in trên hình và Kiểm duyệt). Tạo phụ đề từ giọng nói, chia theo cảnh/nội dung, xử lý âm
+> thanh và lồng tiếng sẽ có ở các bản sau (các mục này hiển thị mờ trong menu).
 
 ## Cài đặt (chạy từ mã nguồn)
 1. Cài FFmpeg: mở PowerShell, chạy `winget install Gyan.FFmpeg`, rồi mở lại PowerShell.
@@ -37,6 +38,31 @@
     được vẫn bị làm mờ và được liệt kê trong kết quả. Chữ đứng yên quá 20 giây (logo, watermark) chỉ bị làm mờ, không
     dịch. Không xử lý phụ đề dạng track rời (chữ mềm) và chưa được thử trên nhiều video thật.
   - Làm mờ phụ đề gốc và thêm bản dịch **không** làm bạn có quyền với video; chỉ đăng nội dung bạn được phép dùng.
+- **Kiểm duyệt** (tùy chọn trong *Tạo clip ngắn*) — tự làm mờ những đoạn dễ vi phạm tiêu chuẩn cộng đồng (Facebook…)
+  và ghi báo cáo. Chạy hoàn toàn trên máy.
+  - Cài một lần:
+    1. `uv sync --extra safety` (NudeNet MIT + onnxruntime MIT + Pillow, mô hình khỏa thân ~12 MB đi kèm).
+    2. Mục bạo lực cần mô hình CLIP (89 MB, giấy phép MIT): bấm **Tải mô hình bạo lực…** → xem dung lượng, giấy phép,
+       nguồn → *Yes*. Ứng dụng tải một lần từ Hugging Face, kiểm tra mã SHA-256, lưu vào `models\`. Không tải nếu bạn
+       không bấm. Có thể bỏ chọn mục bạo lực nếu không muốn tải.
+    3. Mục chữ thô tục cần thêm thư viện đọc chữ: `uv sync --extra vietsub` (cài cả hai cùng lúc:
+       `uv sync --extra vietsub --extra safety`).
+  - Dùng: tích *Kiểm duyệt…*, chọn mục cần che, bấm **Tạo clip**.
+    - **Khỏa thân**: che đúng vùng ngực nữ / bộ phận sinh dục / mông / hậu môn lộ.
+    - **Bạo lực / máu me**: che **cả khung hình** trong đoạn đó (phải thấy liên tục ≥ 2 giây).
+    - **Chữ thô tục**: che dòng chữ trên hình; nếu bật Việt hóa thì từ thô tục trong phụ đề được thay bằng `***`.
+      *Sửa danh sách từ cấm…* mở file `profanity.txt` trong thư mục dữ liệu (mỗi dòng một từ/cụm, dòng `#` là ghi chú).
+  - Kết quả: clip đã làm mờ + file `<tên video> - kiểm duyệt.txt` trong thư mục kết quả (đoạn nào, loại gì, thuộc clip
+    nào). Trang kết quả cũng tóm tắt các đoạn đã che.
+  - Tốc độ (CPU i5-14400): ~23 giây quét cho mỗi phút video khi bật cả ba mục, cộng thời gian mã hóa clip.
+  - Giới hạn — **hãy xem lại video trước khi đăng**:
+    - Nhận diện tự động có thể **bỏ sót hoặc che nhầm** (ví dụ cảnh quyền anh, phim hành động có thể bị coi là bạo lực;
+      góc quay lạ, ảnh tối, hoạt hình có thể bị sót). Ngưỡng mới chỉ được chỉnh trên ít ảnh mẫu, chưa thử nhiều video thật.
+    - **Không bảo đảm** video qua được kiểm duyệt của Facebook hay nền tảng khác — các nền tảng dùng hệ thống và quy
+      định riêng, thay đổi theo thời gian.
+    - Không kiểm tra: vũ khí đứng yên, biểu tượng thù ghét, ma túy, lời nói thô tục trong âm thanh, chữ viết tay/nghệ
+      thuật. Đọc chữ tiếng Việt có dấu kém hơn chữ Trung/Latin.
+    - Làm mờ **không** thay đổi quyền tác giả của nội dung.
 - **Dự án** — nhóm video theo dự án với thư mục đầu vào/đầu ra. "Xóa khỏi danh sách" chỉ xóa bản ghi, **không xóa file**.
 - **Kiểm tra media** — chọn hoặc kéo thả file video/âm thanh → *Bắt đầu kiểm tra*. Kết quả: định dạng, thời lượng,
   độ phân giải, tỷ lệ khung (16:9, 9:16...), FPS, luồng âm thanh và cảnh báo (không có tiếng, thiếu thời lượng...).
@@ -49,7 +75,7 @@
 - File gốc chỉ được đọc. File kết quả không bao giờ ghi đè file có sẵn: nếu trùng tên, ứng dụng thêm ` (1)`, ` (2)`...
 - Đóng ứng dụng khi tác vụ đang chạy: tác vụ được dừng và đánh dấu **Bị gián đoạn**; mở lại và bấm *Chạy lại*.
 - Ứng dụng không tải lên, đăng hay chia sẻ video ở bất kỳ đâu. Chỉ kết nối Internet khi bạn chủ động tải mô hình
-  (từ Giai đoạn 3, luôn hiện dung lượng và giấy phép trước).
+  (hiện tại: mô hình bạo lực CLIP; luôn hiện dung lượng và giấy phép trước, kiểm tra SHA-256 sau khi tải).
 - **Bản quyền:** chỉnh sửa (cắt, dịch, lồng tiếng) **không** làm mất quyền tác giả của nội dung gốc. Chỉ đăng nội dung
   bạn sở hữu hoặc được phép sử dụng.
 
@@ -65,4 +91,6 @@
 | "Không đọc được file media" | File có thể hỏng hoặc chưa tải xong. Thử mở bằng trình phát video; nếu phát được, gửi log. |
 | Dung lượng thấp | Giải phóng ổ đĩa hoặc chọn thư mục đầu ra ở ổ khác. |
 | Cài đặt bị mất | File cấu hình hỏng được sao lưu thành `settings.corrupt-<thời gian>.json` cạnh `settings.json`. |
+| "Chưa tải mô hình nhận diện bạo lực" | Bấm *Tải mô hình bạo lực…* trên trang Tạo clip ngắn, hoặc bỏ chọn mục bạo lực. |
+| Tải mô hình báo sai mã SHA-256 / kích thước | File tải về bị hỏng hoặc khác bản đã kiểm tra — đã bị xóa; thử tải lại. Nếu vẫn lỗi, gửi log. |
 | Lỗi không mong đợi | Cài đặt → *Mở thư mục log*, gửi `app.log`. |

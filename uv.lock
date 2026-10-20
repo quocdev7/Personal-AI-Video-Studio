@@ -2,6 +2,9 @@ version = 1
 revision = 3
 requires-python = "==3.12.*"
 
+[manifest]
+overrides = [{ name = "opencv-python-headless", marker = "sys_platform == 'never'" }]
+
 [[package]]
 name = "anyio"
 version = "4.15.1"
@@ -211,6 +214,20 @@ wheels = [
 ]
 
 [[package]]
+name = "nudenet"
+version = "3.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "onnxruntime" },
+    { name = "opencv-python-headless", marker = "sys_platform == 'never'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/04/8f/9e4862f004f648d240039ebffda2441d230741c164efaa25038051b56c60/nudenet-3.4.2.tar.gz", hash = "sha256:b20645d5f06bbb10006e6d4dc8a9513cf684269bbcffb0557a3ed6831aa90d75", size = 10596676, upload-time = "2024-07-03T17:32:05.792Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1c/ee/1aa02d44ba958cc77e16ff1e41a0aac5e721037db7bf62b9c9d124917f87/nudenet-3.4.2-py3-none-any.whl", hash = "sha256:5937dbd84e5d8e5de038f08ffea5a1bb50a08475776bf2b4795914ce0eaf0331", size = 10595223, upload-time = "2024-07-03T17:32:02.78Z" },
+]
+
+[[package]]
 name = "numpy"
 version = "2.5.4"
 source = { registry = "https://pypi.org/simple" }
@@ -267,6 +284,15 @@ wheels = [
 ]
 
 [[package]]
+name = "opencv-python-headless"
+version = "5.0.0.93"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1d/99/76b7c80252aa83c1af16393454aafd125a0287101afe8deb0a6821af0e30/opencv_python_headless-5.0.0.93.tar.gz", hash = "sha256:b82f9831daab90b725c7c1ee1b36cb5732c367096ac76d119e64e14eb70d5f3c", size = 81817738, upload-time = "2026-07-02T07:01:06.039Z" }
+
+[[package]]
 name = "packaging"
 version = "26.3"
 source = { registry = "https://pypi.org/simple" }
@@ -288,6 +314,11 @@ dependencies = [
 asr = [
     { name = "faster-whisper" },
 ]
+safety = [
+    { name = "nudenet" },
+    { name = "onnxruntime" },
+    { name = "pillow" },
+]
 vietsub = [
     { name = "rapidocr-onnxruntime" },
 ]
@@ -301,11 +332,14 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "faster-whisper", marker = "extra == 'asr'", specifier = ">=1.1,<2" },
+    { name = "nudenet", marker = "extra == 'safety'", specifier = "==3.4.2" },
+    { name = "onnxruntime", marker = "extra == 'safety'", specifier = ">=1.17" },
+    { name = "pillow", marker = "extra == 'safety'", specifier = ">=10" },
     { name = "psutil", specifier = ">=6.0,<8" },
     { name = "pyside6", specifier = "==6.8.3" },
     { name = "rapidocr-onnxruntime", marker = "extra == 'vietsub'", specifier = "==1.4.4" },
 ]
-provides-extras = ["asr", "vietsub"]
+provides-extras = ["asr", "vietsub", "safety"]
 
 [package.metadata.requires-dev]
 dev = [

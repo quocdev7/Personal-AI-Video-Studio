@@ -29,6 +29,10 @@ class Settings:
     clip_split: bool = True  # False = xuất nguyên video (không cắt)
     clip_vietsub: bool = False
     clip_vietsub_region: str = "bottom"
+    clip_safety: bool = False
+    clip_safety_nudity: bool = True
+    clip_safety_violence: bool = True
+    clip_safety_text: bool = True
     # Dịch bằng LLM cục bộ qua Ollama (chỉ gọi tới máy này).
     ollama_url: str = "http://127.0.0.1:11434"
     translate_model: str = "qwen2.5:7b"

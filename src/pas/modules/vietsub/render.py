@@ -184,5 +184,6 @@ def write_text_atomic(path: Path, text: str) -> None:
     import os
 
     part = path.with_name(path.name + ".part")
-    part.write_text(text, encoding="utf-8-sig" if path.suffix.lower() == ".srt" else "utf-8")
+    # BOM cho .srt/.txt: Notepad và trình phát cũ trên Windows mới nhận đúng tiếng Việt.
+    part.write_text(text, encoding="utf-8-sig" if path.suffix.lower() in (".srt", ".txt") else "utf-8")
     os.replace(part, path)

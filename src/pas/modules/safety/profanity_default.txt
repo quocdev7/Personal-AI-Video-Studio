@@ -1,0 +1,80 @@
+# Danh sách từ thô tục / xúc phạm dùng để che chữ trên hình và thay bằng *** trong phụ đề.
+# Mỗi dòng một mục; phần sau dấu # là ghi chú. Không phân biệt hoa thường.
+# Chữ Hán: khớp ở bất kỳ đâu trong câu → tránh chữ đơn dễ nhầm (vd 操 trong 操作 "thao tác", 逼 trong 逼近 "tiến sát").
+# Chữ La-tinh (Việt, Anh): chỉ khớp nguyên từ ("lồn" ≠ "lon").
+# Sửa file này trong thư mục dữ liệu ứng dụng (nút "Sửa danh sách từ…" ở trang Tạo clip ngắn).
+
+# --- Tiếng Việt
+địt
+đụ
+đéo
+lồn
+buồi
+cặc
+đĩ
+điếm
+đm
+đcm
+dcm
+đmm
+dmm
+địt mẹ
+đụ má
+vãi lồn
+vcl
+vkl
+clgt
+cmm
+óc chó
+mặt lồn
+thằng chó đẻ
+con đĩ
+
+# --- Tiếng Trung
+操你
+我操
+肏
+草泥马
+他妈的
+妈的
+你妈
+尼玛
+卧槽
+傻逼
+傻b
+煞笔
+装逼
+牛逼
+屌
+鸡巴
+婊子
+贱人
+狗日
+日你
+王八蛋
+混蛋
+滚蛋
+去死
+杂种
+艹
+
+# --- Tiếng Anh
+fuck
+fucking
+fucked
+fucker
+motherfucker
+shit
+bullshit
+bitch
+cunt
+dick
+pussy
+asshole
+bastard
+whore
+slut
+nigger
+nigga
+faggot
+retard

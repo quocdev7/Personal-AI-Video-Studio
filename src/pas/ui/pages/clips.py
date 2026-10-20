@@ -4,12 +4,17 @@ import html
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QProgressBar, QSpinBox, QTextBrowser, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QSpinBox, QTextBrowser,
+    QVBoxLayout, QWidget,
 )
 
 from pas.core.errors import PasError
 from pas.jobs.models import FINISHED_STATUSES, JobEvent, JobStatus
 from pas.modules.clips.tasks import ASPECT_LABELS, FITS, KIND, MAX_SEGMENT, MIN_SEGMENT, VIDEO_EXTENSIONS
+from pas.modules.safety import models as sf_models
+from pas.modules.safety.report import fmt_time
+from pas.modules.safety.scan import KINDS
+from pas.modules.safety.words import ensure_user_list
 from pas.modules.vietsub.ocr import REGIONS
 from pas.services import AppServices
 from pas.ui.widgets import PageHeader, PathPicker, button, format_duration, format_size, hint_label, open_in_explorer, show_error
@@ -22,13 +27,15 @@ class ClipsPage(QWidget):
         super().__init__()
         self.services = services
         self.job_id: int | None = None
+        self.download_id: int | None = None
         self.output_dir: str | None = None
         self.setObjectName("page")
         lay = QVBoxLayout(self)
         lay.addWidget(PageHeader(
             "Tạo clip ngắn",
             "Thả một video vào → tự cắt thành nhiều clip cùng độ dài, đổi khung (vd 9:16 cho TikTok/Shorts/Reels), "
-            "tùy chọn Việt hóa phụ đề tiếng Trung in trên hình, rồi xuất MP4. Mỗi clip được kiểm tra lại sau khi xuất. "
+            "tùy chọn Việt hóa phụ đề tiếng Trung in trên hình và làm mờ nội dung nhạy cảm, rồi xuất MP4. "
+            "Mỗi clip được kiểm tra lại sau khi xuất. "
             "File gốc không bị thay đổi.",
         ))
 
@@ -64,6 +71,26 @@ class ClipsPage(QWidget):
             self.region.addItem(label, key)
         self.region.setCurrentIndex(max(0, self.region.findData(s.clip_vietsub_region)))
         self.vietsub.toggled.connect(self._sync_fit)
+        self.safety = QCheckBox("Kiểm duyệt: tự làm mờ nội dung dễ vi phạm tiêu chuẩn cộng đồng (Facebook…) + báo cáo")
+        self.safety.setChecked(s.clip_safety)
+        self.safety.toggled.connect(self._sync_fit)
+        self.safety_kinds = {k: QCheckBox(label) for k, label in KINDS.items()}
+        for k, cb in self.safety_kinds.items():
+            cb.setChecked(getattr(s, f"clip_safety_{k}"))
+            cb.toggled.connect(self._sync_fit)
+        kinds_row = QHBoxLayout()
+        for cb in self.safety_kinds.values():
+            kinds_row.addWidget(cb)
+        kinds_row.addStretch(1)
+        tools_row = QHBoxLayout()
+        self.btn_model = button("Tải mô hình bạo lực…")
+        self.btn_model.clicked.connect(self._download_model)
+        self.btn_words = button("Sửa danh sách từ cấm…")
+        self.btn_words.clicked.connect(self._edit_words)
+        self.model_status = QLabel()
+        tools_row.addWidget(self.btn_model)
+        tools_row.addWidget(self.btn_words)
+        tools_row.addWidget(self.model_status, 1)
         self.out = PathPicker("dir", placeholder="Để trống = cạnh video gốc (hoặc thư mục mặc định trong Cài đặt)")
         form.addRow("", self.split)
         form.addRow("Độ dài mỗi clip", self.seconds)
@@ -71,6 +98,9 @@ class ClipsPage(QWidget):
         form.addRow("Lấp khung", self.fit)
         form.addRow("", self.vietsub)
         form.addRow("Tìm phụ đề ở", self.region)
+        form.addRow("", self.safety)
+        form.addRow("Che", kinds_row)
+        form.addRow("", tools_row)
         form.addRow("Lưu vào", self.out)
         form.addRow(hint_label(
             "Clip cuối ngắn hơn 30% độ dài clip sẽ được gộp vào clip trước. Kết quả nằm trong thư mục mới "
@@ -80,6 +110,12 @@ class ClipsPage(QWidget):
             "Việt hóa phụ đề cần Ollama và mô hình qwen2.5:7b chạy trên máy này (không gửi dữ liệu ra ngoài). "
             "Bản dịch máy có thể sai — xem lại file '<tên video> - vi.srt' trước khi đăng. Trên CPU, dịch khoảng "
             "3–5 giây mỗi câu. Chữ đứng yên quá 20 giây (logo) chỉ được làm mờ, không dịch."
+        ))
+        form.addRow(hint_label(
+            "Kiểm duyệt chạy trên máy: khỏa thân (NudeNet) che đúng vùng; bạo lực / máu me (CLIP) che cả khung; "
+            "chữ thô tục trên hình (theo danh sách từ, sửa được) che dòng chữ và thay bằng *** trong phụ đề. "
+            "Nhận diện tự động có thể sót hoặc che nhầm và KHÔNG bảo đảm qua được kiểm duyệt của Facebook — "
+            "xem file '<tên video> - kiểm duyệt.txt' và xem lại video trước khi đăng."
         ))
         lay.addWidget(opt)
         self._sync_fit()
@@ -118,6 +154,52 @@ class ClipsPage(QWidget):
         self.fit.setEnabled(self.aspect.currentData() != "original")
         self.seconds.setEnabled(self.split.isChecked())
         self.region.setEnabled(self.vietsub.isChecked())
+        on = self.safety.isChecked()
+        for cb in self.safety_kinds.values():
+            cb.setEnabled(on)
+        self.btn_words.setEnabled(on)
+        self._sync_model()
+
+    def _sync_model(self) -> None:
+        m = sf_models.CLIP_VISION
+        installed = sf_models.is_installed(self.services.paths.models_dir, m)
+        downloading = self.download_id is not None
+        self.btn_model.setVisible(not installed)
+        self.btn_model.setEnabled(not downloading and self.safety.isChecked())
+        needed = self.safety.isChecked() and self.safety_kinds["violence"].isChecked()
+        if installed:
+            self.model_status.setText("Mô hình bạo lực: đã có")
+        elif downloading:
+            self.model_status.setText("Đang tải mô hình bạo lực (xem trang Tác vụ)…")
+        else:
+            self.model_status.setText(f"Mô hình bạo lực chưa tải ({m.size / 1e6:.0f} MB)"
+                                      + (" — cần tải, hoặc bỏ chọn mục bạo lực" if needed else ""))
+
+    def _download_model(self) -> None:
+        m = sf_models.CLIP_VISION
+        answer = QMessageBox.question(
+            self, "Tải mô hình",
+            f"{m.title}\n\nDung lượng: {m.size / 1e6:.0f} MB\nGiấy phép: {m.license}\nNguồn: {m.source}\n\n"
+            "Chỉ tải một lần (cần mạng), kiểm tra mã SHA-256 rồi lưu vào thư mục dữ liệu ứng dụng. "
+            "Sau đó chạy hoàn toàn trên máy. Tải ngay?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            job = self.services.jobs.submit(sf_models.DOWNLOAD_KIND, "Tải mô hình bạo lực (CLIP)", {"model": m.key})
+        except PasError as exc:
+            show_error(self, exc, "Không thể tải")
+            return
+        self.download_id = job.id
+        self._sync_model()
+
+    def _edit_words(self) -> None:
+        try:
+            path = ensure_user_list(self.services.paths.root)
+        except OSError as exc:
+            show_error(self, PasError(f"Không tạo được file danh sách từ: {exc}"), "Có lỗi")
+            return
+        open_in_explorer(self, path)
 
     def _start(self) -> None:
         path = self.picker.path()
@@ -130,6 +212,8 @@ class ClipsPage(QWidget):
             "vietsub": self.vietsub.isChecked(),
             "vietsub_region": self.region.currentData(),
         }
+        if self.safety.isChecked():
+            params["safety"] = {k: cb.isChecked() for k, cb in self.safety_kinds.items()}
         try:
             job = self.services.jobs.submit(KIND, f"Tạo clip {Path(path).name}", params)
         except PasError as exc:
@@ -140,6 +224,9 @@ class ClipsPage(QWidget):
             s.clip_seconds = params["segment_seconds"]
         s.clip_split, s.clip_aspect, s.clip_fit = self.split.isChecked(), params["aspect"], params["fit"]
         s.clip_vietsub, s.clip_vietsub_region = params["vietsub"], params["vietsub_region"]
+        s.clip_safety = self.safety.isChecked()
+        for k, cb in self.safety_kinds.items():
+            setattr(s, f"clip_safety_{k}", cb.isChecked())
         try:
             self.services.save_settings()
         except OSError:  # chỉ là ghi nhớ lựa chọn; tác vụ vẫn chạy
@@ -163,6 +250,13 @@ class ClipsPage(QWidget):
         self.btn_open.setEnabled(bool(self.output_dir))
 
     def on_job_event(self, event: JobEvent) -> None:
+        if event.job_id == self.download_id and event.status in FINISHED_STATUSES:
+            self.download_id = None
+            job = self.services.job_repo.get(event.job_id)
+            self._sync_model()
+            if job.status == JobStatus.FAILED:
+                show_error(self, PasError(job.error or "Tải mô hình thất bại", job.error_hint), "Không tải được mô hình")
+            return
         if event.job_id != self.job_id:
             return
         self.progress.setValue(int(event.progress * 100))
@@ -204,4 +298,18 @@ def render_result(r: dict) -> str:
         if vs["failed"]:
             out += ("<p style='color:#a11'><b>Không dịch được (chỉ làm mờ):</b> "
                     + e("; ".join(vs["failed"][:10])) + ("…" if len(vs["failed"]) > 10 else "") + "</p>")
+    sf = r.get("safety")
+    if sf:
+        n = len(sf["intervals"])
+        if not n:
+            out += "<p>Kiểm duyệt: không phát hiện đoạn nào cần che.</p>"
+        else:
+            parts = ", ".join(f"{KINDS[k]} {c} đoạn" for k, c in sf["counts"].items() if c)
+            items = "".join(f"<li>{fmt_time(i['start'])}–{fmt_time(i['end'])} {e(KINDS[i['kind']])}: "
+                            f"{e(', '.join(i['labels']))}</li>" for i in sf["intervals"][:15])
+            more = f"<li>… và {n - 15} đoạn khác</li>" if n > 15 else ""
+            out += (f"<p style='color:#8a5a00'><b>Kiểm duyệt: đã làm mờ {n} đoạn</b> ({e(parts)}).</p>"
+                    f"<ul>{items}{more}</ul>")
+        out += (f"<p>Báo cáo: {e(Path(sf['report']).name)}. Nhận diện tự động có thể sót/che nhầm, "
+                "không bảo đảm qua kiểm duyệt của nền tảng — hãy xem lại video.</p>")
     return out + f"<table>{rows}</table>"

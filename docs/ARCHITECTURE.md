@@ -98,6 +98,22 @@ Quy tắc phụ thuộc: `ui → services → jobs/projects → modules → medi
   gốc; phụ đề Việt dạng ASS (libass) đặt tại tâm vùng chữ sau khi đổi khung; xuất SRT (UTF-8 BOM). Bộ lọc ghi ra file
   (`-/filter_complex`) trong thư mục tạm của tác vụ, FFmpeg chạy với `cwd` đó để không phải escape đường dẫn Windows.
 
+### modules/safety (Kiểm duyệt, dùng trong tác vụ "Tạo clip ngắn")
+- `scan.py` — một lượt FFmpeg xuất khung (4 khung/giây, ≤ 640 px) → NudeNet mọi khung, CLIP 1 khung/giây, OCR 1
+  khung/giây → `Detection(t, kind, box | cả khung, hold)`; `intervals()` gom thành đoạn cho báo cáo.
+- `detect.py` — onnxruntime CPU, **tắt spin** (nhiều mô hình chạy xen kẽ). NudeNet: tiền/hậu xử lý viết lại theo
+  nudenet 3.4.2, không cần cv2; lưu ý mô hình nhận **BGR** (thư viện gốc đảo kênh hai lần) và nội suy kiểu cv2
+  INTER_LINEAR — đã kiểm bằng test so với thư viện gốc. CLIP: điểm = tổng xác suất softmax của các câu "nguy hiểm"
+  trên tập câu nguy hiểm + an toàn; vector văn bản tính sẵn trong `clip_prompts.npy` (`scripts/build_clip_prompts.py`).
+- `words.py` — danh sách từ (mặc định trong gói; bản sửa của người dùng `profanity.txt` trong thư mục dữ liệu).
+- `mask.py` — ghi video mặt nạ xám (cùng kích thước khung gốc) qua pipe vào thư mục tạm → bộ lọc phủ bản làm mờ mạnh
+  (thu nhỏ 24 lần) lên đúng vùng; mặt nạ là đầu vào thứ 2 của FFmpeg, cắt cùng chỗ với từng clip. Clip không có gì
+  cần che không dùng mặt nạ.
+- `report.py` — báo cáo văn bản + lưu ý không bảo đảm vượt kiểm duyệt.
+- `models.py` — tác vụ `model.download`: URL cố định theo commit, ghi `*.part`, kiểm tra kích thước + SHA-256 rồi mới
+  đổi tên; chỉ tải dữ liệu trọng số, không chạy file thực thi.
+- RapidOCR (`vietsub/ocr.py::load_engine`) cũng được tắt spin bằng cách tạm thay hàm tạo SessionOptions khi khởi tạo.
+
 ### ui
 - `JobEventBridge(QObject)` nhận callback từ thread worker và phát Qt signal (queued connection) để trang cập nhật trên main thread.
 - Trang chưa có backend hiển thị **mờ** trong thanh điều hướng với chú thích giai đoạn — không có nút giả.
@@ -131,3 +147,6 @@ Thời gian lưu ISO-8601 UTC. Xóa dự án chỉ xóa bản ghi, **không** đ
   `ollama pull` kèm dung lượng.
 - Giấy phép thành phần Việt hóa: RapidOCR (Apache-2.0, kèm mô hình PaddleOCR Apache-2.0), Ollama (MIT), Qwen2.5-7B-Instruct
   (Apache-2.0).
+- Kiểm duyệt: lời gọi Internet duy nhất là tải mô hình CLIP khi người dùng bấm và xác nhận (huggingface.co, URL cố
+  định theo commit, kiểm tra SHA-256). Giấy phép: NudeNet (MIT, kèm mô hình 320n), onnxruntime (MIT), Pillow (MIT-CMU),
+  CLIP ViT-B/32 (MIT, OpenAI; bản ONNX của Xenova).

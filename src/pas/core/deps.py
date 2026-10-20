@@ -27,7 +27,21 @@ OPTIONAL_PACKAGES = [
     # (tên import, mô tả, lệnh cài)
     ("faster_whisper", "faster-whisper — nhận dạng giọng nói (Module B)", "uv sync --extra asr"),
     ("rapidocr_onnxruntime", "RapidOCR — đọc phụ đề in trên hình (Việt hóa phụ đề)", "uv sync --extra vietsub"),
+    ("nudenet", "NudeNet (MIT) — nhận diện khỏa thân (Kiểm duyệt)", "uv sync --extra safety"),
+    ("onnxruntime", "onnxruntime (MIT) — chạy mô hình kiểm duyệt trên CPU", "uv sync --extra safety"),
+    ("PIL", "Pillow — xử lý ảnh cho mô hình kiểm duyệt", "uv sync --extra safety"),
 ]
+
+
+def _clip_status(paths: AppPaths) -> DependencyStatus:
+    from pas.modules.safety import models as sf_models
+
+    m = sf_models.CLIP_VISION
+    name = "Mô hình CLIP ViT-B/32 (MIT) — nhận diện bạo lực / máu me (Kiểm duyệt)"
+    if sf_models.is_installed(paths.models_dir, m):
+        return DependencyStatus(name, True, f"Đã tải — {sf_models.model_path(paths.models_dir, m)}", required=False)
+    return DependencyStatus(name, False, f"Chưa tải ({m.size / 1e6:.0f} MB)",
+                            "Ở trang 'Tạo clip ngắn', bật Kiểm duyệt rồi bấm 'Tải mô hình bạo lực…'.", required=False)
 
 
 def _ollama_status(settings: Settings) -> DependencyStatus:
@@ -71,6 +85,7 @@ def check_environment(settings: Settings, paths: AppPaths) -> list[DependencySta
             desc, installed, "Đã cài" if installed else "Chưa cài",
             "" if installed else f"Cài khi cần dùng: `{install}`", required=False,
         ))
+    results.append(_clip_status(paths))
     results.append(_ollama_status(settings))
 
     min_free = int(settings.min_free_disk_gb * GB)

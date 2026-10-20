@@ -17,6 +17,13 @@ asr = [
 vietsub = [
     "rapidocr-onnxruntime==1.4.4",
 ]
+# Kiểm duyệt (che khỏa thân / bạo lực / chữ thô tục): NudeNet (MIT) — chỉ dùng file mô hình ONNX đi kèm, chạy bằng
+# onnxruntime (MIT); Pillow (MIT-CMU) để đổi kích thước ảnh. Mô hình CLIP (MIT) tải riêng khi người dùng đồng ý.
+safety = [
+    "nudenet==3.4.2",
+    "onnxruntime>=1.17",
+    "pillow>=10",
+]
 
 [dependency-groups]
 dev = [
@@ -40,3 +47,8 @@ markers = [
     "ffmpeg: test cần FFmpeg/ffprobe thật trên máy",
     "ollama: test gọi Ollama thật trên máy (chậm, chỉ chạy khi đặt PAS_TEST_OLLAMA=1)",
 ]
+
+[tool.uv]
+# nudenet kéo theo opencv-python-headless, trùng thư mục cv2 với opencv-python của RapidOCR (cài cả hai làm hỏng
+# cv2). Ứng dụng không dùng cv2 cho NudeNet nên bỏ gói headless.
+override-dependencies = ["opencv-python-headless; sys_platform == 'never'"]
