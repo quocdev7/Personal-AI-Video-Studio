@@ -1,4 +1,5 @@
-"""Bộ nhận diện: khỏa thân (NudeNet 320n, YOLOv8 — có vị trí) và bạo lực/máu me (CLIP zero-shot — cả khung).
+"""Bộ nhận diện: khỏa thân (NudeNet 320n, YOLOv8 — có vị trí) và bạo lực/máu me (CLIP zero-shot — điểm cả khung,
+định vị bằng cửa sổ trượt).
 
 Cả hai chạy bằng onnxruntime trên CPU, ảnh đầu vào là numpy RGB uint8. Tiền/hậu xử lý NudeNet viết lại theo
 nudenet 3.4.2 (MIT) — cho kết quả như thư viện gốc — nhưng không cần cv2 (OpenCV).
@@ -210,3 +211,62 @@ class ViolenceClassifier:
         embed = self.session.run(["image_embeds"], {"pixel_values": clip_pixels(rgb)})[0][0]
         score, top = violence_score(embed, self.text)
         return round(score, 3), UNSAFE_LABELS[top]
+
+    def localize(self, rgb: "np.ndarray") -> list[Box]:
+        """Vùng cần che trên khung đã bị gắn cờ bạo lực (pixel của rgb). Chấm điểm từng cửa sổ vuông trượt (một lượt
+        batch, ~0,4 s/khung trên CPU) rồi chọn bằng select_windows — không bao giờ trả về cả khung."""
+        import numpy as np
+
+        h, w = rgb.shape[:2]
+        wins = sliding_windows(w, h)
+        batch = np.concatenate([clip_pixels(rgb[y0:y1, x0:x1]) for x0, y0, x1, y1 in wins])
+        embeds = self.session.run(["image_embeds"], {"pixel_values": batch})[0]
+        scores = [violence_score(e, self.text)[0] for e in embeds]
+        return [tuple(float(v) for v in b) for b in select_windows(wins, scores, w, h)]
+
+
+# Định vị bạo lực: CLIP chỉ cho điểm cả ảnh, nên chấm từng cửa sổ vuông cạnh = 40% cạnh ngắn (bước nửa cửa sổ) và che
+# các cửa sổ gần điểm cao nhất. Thử trên ảnh mẫu: ngưỡng tuyệt đối làm gần như mọi cửa sổ của cảnh bạo lực rõ đều vượt
+# (= lại che cả khung), nên chọn tương đối theo đỉnh và giới hạn tổng diện tích.
+WINDOW_FRAC = 0.4
+WINDOW_MARGIN = 0.1  # giữ cửa sổ có điểm ≥ điểm cao nhất − 0,1
+WINDOW_MAX_AREA = 0.35  # tổng vùng che ≤ 35% khung (cửa sổ cao nhất luôn được giữ)
+
+
+def sliding_windows(w: int, h: int, frac: float = WINDOW_FRAC) -> list[tuple[int, int, int, int]]:
+    import math
+
+    import numpy as np
+
+    side = max(1, round(min(w, h) * frac))
+    stride = side / 2
+    nx = max(1, math.ceil((w - side) / stride) + 1)
+    ny = max(1, math.ceil((h - side) / stride) + 1)
+    xs = np.linspace(0, w - side, nx).round().astype(int)
+    ys = np.linspace(0, h - side, ny).round().astype(int)
+    return [(int(x), int(y), int(x) + side, int(y) + side) for y in ys for x in xs]
+
+
+def select_windows(wins: list[tuple[int, int, int, int]], scores, w: int, h: int,
+                   margin: float = WINDOW_MARGIN, max_area: float = WINDOW_MAX_AREA) -> list[tuple[int, int, int, int]]:
+    """Cửa sổ cao điểm nhất, rồi lần lượt các cửa sổ có điểm ≥ đỉnh − margin miễn tổng diện tích (hợp) ≤ max_area."""
+    import numpy as np
+
+    if not wins:
+        return []
+    scores = np.asarray(scores, dtype=float)
+    order = np.argsort(-scores, kind="stable")
+    top = scores[order[0]]
+    covered = np.zeros((h, w), dtype=bool)
+    chosen: list[tuple[int, int, int, int]] = []
+    for i in order:
+        if chosen and scores[i] < top - margin:
+            break
+        x0, y0, x1, y1 = wins[i]
+        trial = covered.copy()
+        trial[y0:y1, x0:x1] = True
+        if chosen and trial.mean() > max_area:
+            continue
+        covered = trial
+        chosen.append(wins[i])
+    return chosen

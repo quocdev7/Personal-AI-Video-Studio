@@ -98,11 +98,63 @@ def test_prompt_embeddings_match_prompt_lists():
 
 
 def test_violence_runs_need_consecutive_samples():
-    samples = [(0, 0.9, "a"), (1, 0.1, "b"), (2, 0.7, "c"), (3, 0.8, "d"), (4, 0.65, "e"), (5, 0.2, "f"),
-               (6, 0.95, "g")]
+    b1, b2 = (0.0, 0.0, 10.0, 10.0), (20.0, 20.0, 30.0, 30.0)
+    samples = [(0, 0.9, "a", [b1]), (1, 0.1, "b", []), (2, 0.7, "c", [b1, b2]), (3, 0.8, "d", [b2]),
+               (4, 0.65, "e", [b1]), (5, 0.2, "f", []), (6, 0.95, "g", [b1])]
     got = scan.violence_runs(samples, threshold=0.6, min_run=2)
-    assert [d.t for d in got] == [2, 3, 4]  # mẫu lẻ loi ở 0 và 6 bị bỏ
-    assert all(d.kind == "violence" and d.box is None for d in got)
+    assert [(d.t, d.box) for d in got] == [(2, b1), (2, b2), (3, b2), (4, b1)]  # mẫu lẻ loi ở 0 và 6 bị bỏ
+    assert all(d.kind == "violence" for d in got)
+
+
+def test_violence_boxes_of_adjacent_seconds_do_not_stack():
+    left, right = (0.0, 0.0, 320.0, 360.0), (320.0, 0.0, 640.0, 360.0)
+    samples = [(t, 0.9, "x", [left if t % 2 else right]) for t in range(10, 15)]
+    dets = scan.violence_runs(samples)
+    w, h, n, rects = mask.frame_rects(dets, 20.0, 640, 360)
+    covered = [k for k in range(n) if k in rects]
+    assert covered == list(range(covered[0], covered[-1] + 1))  # liền mạch, không hở
+    assert all(len(rects[k]) == 1 for k in covered)  # mỗi khung chỉ một vùng, không cộng dồn giây trước/sau
+    assert rects[10 * 4][0][0] == w // 2 and rects[11 * 4][0][0] == 0
+
+
+def test_sliding_windows_cover_frame():
+    wins = detect.sliding_windows(640, 360)
+    side = round(360 * detect.WINDOW_FRAC)
+    assert all(x1 - x0 == side and y1 - y0 == side for x0, y0, x1, y1 in wins)
+    assert min(w[0] for w in wins) == 0 and max(w[2] for w in wins) == 640
+    assert min(w[1] for w in wins) == 0 and max(w[3] for w in wins) == 360
+    assert detect.sliding_windows(100, 100, frac=1.0) == [(0, 0, 100, 100)]
+
+
+def test_select_windows_peak_relative_and_area_capped():
+    w, h = 400, 100
+    wins = [(x, 0, x + 100, 100) for x in (0, 100, 200, 300)]  # mỗi cửa sổ = 25% khung
+    # Mọi cửa sổ đều "bạo lực" (≥ ngưỡng): vẫn không che quá 35% → chỉ cửa sổ đỉnh.
+    assert detect.select_windows(wins, [0.9, 0.95, 0.92, 0.91], w, h) == [wins[1]]
+    # Nới giới hạn: các cửa sổ gần đỉnh (≥ 0,95 − 0,1) được thêm, cửa sổ thấp bị bỏ.
+    assert detect.select_windows(wins, [0.3, 0.95, 0.9, 0.7], w, h, max_area=0.6) == [wins[1], wins[2]]
+    # Cửa sổ đỉnh luôn được giữ dù to hơn giới hạn.
+    assert detect.select_windows([(0, 0, 400, 100)], [0.8], w, h) == [(0, 0, 400, 100)]
+    assert detect.select_windows([], [], w, h) == []
+
+
+def test_localize_returns_violent_window_not_whole_frame():
+    text = np.load(detect.PROMPTS_FILE).astype(np.float32)
+    rgb = np.zeros((360, 640, 3), np.uint8)
+    wins = detect.sliding_windows(640, 360)
+    hot = 5
+
+    class _Session:
+        def run(self, names, feeds):
+            n = feeds["pixel_values"].shape[0]
+            assert names == ["image_embeds"] and n == len(wins)  # một lượt batch cho mọi cửa sổ
+            e = np.repeat(text[len(detect.UNSAFE_PROMPTS)][None] * 3, n, 0)  # câu SAFE
+            e[hot] = text[0] * 3  # cửa sổ thứ 5 trùng câu UNSAFE
+            return [e]
+
+    vc = detect.ViolenceClassifier.__new__(detect.ViolenceClassifier)
+    vc.text, vc.session, vc.threshold = text, _Session(), 0.6
+    assert vc.localize(rgb) == [tuple(float(v) for v in wins[hot])]
 
 
 # ------------------------------------------------------------------ Từ cấm
@@ -308,11 +360,21 @@ class _ByTime:
         return self.fn(t)
 
 
+class _FakeViolence(_ByTime):
+    def __init__(self):
+        super().__init__(scan.CLIP_EVERY, lambda t: (0.9, "máu me") if t in (6.0, 7.0) else (0.1, "máu me"))
+        self.localized = 0
+
+    def localize(self, rgb):
+        self.localized += 1
+        return [(0.0, 0.0, 320.0, 180.0)]  # góc trên-trái (pixel khung mẫu 640×360)
+
+
 def _fake_detectors(opts, models_dir, app_root, ctx):
     return {
         "nudity": _ByTime(1, lambda t: [("FEMALE_BREAST_EXPOSED", 0.9, (200.0, 100.0, 360.0, 220.0))]
                           if 2.0 <= t < 3.0 else []),
-        "violence": _ByTime(scan.CLIP_EVERY, lambda t: (0.9, "máu me") if t in (6.0, 7.0) else (0.1, "máu me")),
+        "violence": _FakeViolence(),
     }
 
 
@@ -350,7 +412,7 @@ def test_safety_job_blurs_only_detected_regions_and_times(services, ffmpeg_tools
     sf = job.result["safety"]
     assert sf["counts"] == {"nudity": 1, "violence": 1, "text": 0}
     assert [(i["kind"], i["start"], i["end"]) for i in sf["intervals"]] == [("nudity", 1.5, 3.25),
-                                                                          ("violence", 5.0, 8.0)]
+                                                                          ("violence", 5.55, 7.45)]
     rep = Path(sf["report"])
     assert rep.name == "video gốc - kiểm duyệt.txt"
     text = rep.read_text(encoding="utf-8-sig")
@@ -365,7 +427,9 @@ def test_safety_job_blurs_only_detected_regions_and_times(services, ffmpeg_tools
     assert diff(part1, 1.0, 1.0) < 3  # trước khi phát hiện: giữ nguyên
     assert diff(part1, 2.5, 2.5, box) > 15  # trong hộp: mờ
     assert diff(part1, 2.5, 2.5, outside) < 3  # ngoài hộp: giữ nguyên
-    assert diff(part2, 1.5, 6.5, outside) > 15  # bạo lực: cả khung mờ (mặt nạ cắt đúng chỗ với -ss 5)
+    top_left, bottom_right = (slice(20, 160), slice(20, 300)), (slice(200, 360), slice(340, 640))
+    assert diff(part2, 1.5, 6.5, top_left) > 15  # bạo lực: vùng định vị mờ (mặt nạ cắt đúng chỗ với -ss 5)
+    assert diff(part2, 1.5, 6.5, bottom_right) < 3  # phần còn lại của khung vẫn xem được
     assert diff(part2, 4.6, 9.6) < 3  # sau đoạn bạo lực: giữ nguyên
     assert src.read_bytes() == before  # file gốc không đổi
     assert not (services.paths.temp_dir / f"job-{job.id}").exists()  # thư mục tạm (cả mặt nạ) đã dọn

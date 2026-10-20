@@ -1,7 +1,8 @@
 """Quét video một lượt: mỗi khung mẫu (4 khung/giây, rộng ≤ 640) đưa qua các bộ nhận diện được bật.
 
 - Khỏa thân: mọi khung mẫu, có vị trí → che đúng vùng.
-- Bạo lực / máu me: 1 khung/giây; chỉ tính khi ≥ 2 khung liên tiếp vượt ngưỡng (giảm báo nhầm) → che cả khung.
+- Bạo lực / máu me: 1 khung/giây; chỉ tính khi ≥ 2 khung liên tiếp vượt ngưỡng (giảm báo nhầm) → che các vùng
+  điểm cao nhất của khung (cửa sổ CLIP, ≤ 35% khung), không che cả khung.
 - Chữ thô tục: OCR 1 khung/giây (lệch pha với CLIP), dòng chữ có từ trong danh sách → che dòng đó.
 Tọa độ trả về theo pixel video gốc.
 """
@@ -34,7 +35,9 @@ NUDITY_THRESHOLD = 0.35
 VIOLENCE_THRESHOLD = 0.6
 VIOLENCE_MIN_RUN = 2
 NUDITY_HOLD = 0.5  # giây che thêm trước/sau mỗi lần thấy (khung mẫu cách nhau 0,25 s)
-VIOLENCE_HOLD = 1.0
+# < nửa khoảng cách mẫu (1 s): mỗi khung mặt nạ chỉ nhận vùng của mẫu gần nhất. Nếu giữ lâu hơn, vùng của các giây
+# kề nhau chồng lên nhau và tổng diện tích che vượt xa giới hạn ~1/3 khung của mỗi mẫu.
+VIOLENCE_HOLD = 0.45
 TEXT_HOLD = 1.0
 BOX_MARGIN = 0.15
 
@@ -49,7 +52,7 @@ class Detection:
     kind: str  # nudity | violence | text
     label: str
     score: float
-    box: Box | None  # None = cả khung
+    box: Box | None  # None = cả khung (chỉ còn trong kết quả quét đã lưu của bản cũ)
     hold: float
 
     def to_dict(self) -> dict:
@@ -75,17 +78,22 @@ def _grow(box: Box, margin: float, w: float, h: float) -> Box:
     return max(0.0, x0 - mx), max(0.0, y0 - my), min(w, x1 + mx), min(h, y1 + my)
 
 
-def violence_runs(samples: list[tuple[float, float, str]], threshold: float = VIOLENCE_THRESHOLD,
+ViolenceSample = tuple[float, float, str, list[Box]]
+
+
+def violence_runs(samples: list[ViolenceSample], threshold: float = VIOLENCE_THRESHOLD,
                   min_run: int = VIOLENCE_MIN_RUN) -> list[Detection]:
-    """samples: (t, điểm, nhãn) theo thứ tự thời gian, 1 mẫu/giây. Chỉ giữ chuỗi ≥ min_run mẫu liên tiếp vượt ngưỡng."""
+    """samples: (t, điểm, nhãn, vùng cần che) theo thứ tự thời gian, 1 mẫu/giây. Chỉ giữ chuỗi ≥ min_run mẫu liên
+    tiếp vượt ngưỡng; mỗi vùng thành một Detection."""
     out: list[Detection] = []
-    run: list[tuple[float, float, str]] = []
-    for s in samples + [(math.inf, 0.0, "")]:
+    run: list[ViolenceSample] = []
+    for s in samples + [(math.inf, 0.0, "", [])]:
         if s[1] >= threshold:
             run.append(s)
             continue
         if len(run) >= min_run:
-            out += [Detection(round(t, 3), "violence", lab, sc, None, VIOLENCE_HOLD) for t, sc, lab in run]
+            out += [Detection(round(t, 3), "violence", lab, sc, box, VIOLENCE_HOLD)
+                    for t, sc, lab, boxes in run for box in boxes]
         run = []
     return out
 
@@ -115,7 +123,7 @@ def scan_video(
         reader = FrameOCR(ocr_engine, geo, keep=lambda t: True)
 
     dets: list[Detection] = []
-    clip_samples: list[tuple[float, float, str]] = []
+    clip_samples: list[ViolenceSample] = []
     total = max(1, int(duration * SAMPLE_FPS))
     vf = f"fps={SAMPLE_FPS:g},scale={w}:{h}:flags=area,format=bgr24"
     idx = 0
@@ -130,7 +138,10 @@ def scan_video(
                 dets.append(Detection(t, "nudity", EXPOSED.get(label, label), score, box, NUDITY_HOLD))
         if violence is not None and idx % CLIP_EVERY == 0:
             score, label = violence(rgb)
-            clip_samples.append((t, score, label))
+            boxes: list[Box] = []
+            if score >= VIOLENCE_THRESHOLD:  # chỉ định vị khung bị gắn cờ (tốn ~0,4 s/khung)
+                boxes = [(x0 * sx, y0 * sy, x1 * sx, y1 * sy) for x0, y0, x1, y1 in violence.localize(rgb)]
+            clip_samples.append((t, score, label, boxes))
         if reader is not None and idx % OCR_EVERY == OCR_OFFSET:
             for line in reader(bgr):
                 found = words.find(line.text)

@@ -112,8 +112,9 @@ class ClipsPage(QWidget):
             "3–5 giây mỗi câu. Chữ đứng yên quá 20 giây (logo) chỉ được làm mờ, không dịch."
         ))
         form.addRow(hint_label(
-            "Kiểm duyệt chạy trên máy: khỏa thân (NudeNet) che đúng vùng; bạo lực / máu me (CLIP) che cả khung; "
-            "chữ thô tục trên hình (theo danh sách từ, sửa được) che dòng chữ và thay bằng *** trong phụ đề. "
+            "Kiểm duyệt chạy trên máy: khỏa thân (NudeNet) che đúng vùng; bạo lực / máu me (CLIP) che vùng nghi "
+            "vấn nhất (tối đa ~1/3 khung, không che cả khung); chữ thô tục trên hình (theo danh sách từ, sửa "
+            "được) che dòng chữ và thay bằng *** trong phụ đề. "
             "Nhận diện tự động có thể sót hoặc che nhầm và KHÔNG bảo đảm qua được kiểm duyệt của Facebook — "
             "xem file '<tên video> - kiểm duyệt.txt' và xem lại video trước khi đăng."
         ))

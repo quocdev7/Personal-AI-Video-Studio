@@ -48,10 +48,9 @@ def build_report(source_name: str, enabled: dict[str, bool], dets: list[Detectio
         lines.append(f"Đã làm mờ {len(ivs)} đoạn (thời gian theo video gốc):")
         many = len(segments) > 1
         for i in ivs:
-            where = "che vùng phát hiện" if i.kind != "violence" else "che cả khung hình"
             part = f" [phần {_segment_of(i.start, segments)}]" if many else ""
             lines.append(f"- {fmt_time(i.start)}–{fmt_time(i.end)}{part}  {KINDS[i.kind]}: "
-                         f"{', '.join(i.labels)} (độ tin cậy {i.score:.2f}) → {where}")
+                         f"{', '.join(i.labels)} (độ tin cậy {i.score:.2f}) → che vùng phát hiện")
     if masked_lines:
         lines += ["", f"Phụ đề: {masked_lines} câu có từ thô tục đã được thay bằng ***."]
     return "\n".join(lines) + "\n"

@@ -49,12 +49,15 @@
        `uv sync --extra vietsub --extra safety`).
   - Dùng: tích *Kiểm duyệt…*, chọn mục cần che, bấm **Tạo clip**.
     - **Khỏa thân**: che đúng vùng ngực nữ / bộ phận sinh dục / mông / hậu môn lộ.
-    - **Bạo lực / máu me**: che **cả khung hình** trong đoạn đó (phải thấy liên tục ≥ 2 giây).
+    - **Bạo lực / máu me**: che **vùng nghi vấn nhất** trong khung (người bị đánh/ngã, vết máu, vũ khí…), tối đa
+      khoảng 1/3 khung hình — phần còn lại vẫn xem được (phải thấy liên tục ≥ 2 giây). Vùng che là các ô vuông khá
+      lớn và đổi mỗi giây, có thể lệch khỏi chỗ cần che khi cảnh chuyển động nhanh.
     - **Chữ thô tục**: che dòng chữ trên hình; nếu bật Việt hóa thì từ thô tục trong phụ đề được thay bằng `***`.
       *Sửa danh sách từ cấm…* mở file `profanity.txt` trong thư mục dữ liệu (mỗi dòng một từ/cụm, dòng `#` là ghi chú).
   - Kết quả: clip đã làm mờ + file `<tên video> - kiểm duyệt.txt` trong thư mục kết quả (đoạn nào, loại gì, thuộc clip
     nào). Trang kết quả cũng tóm tắt các đoạn đã che.
-  - Tốc độ (CPU i5-14400): ~23 giây quét cho mỗi phút video khi bật cả ba mục, cộng thời gian mã hóa clip.
+  - Tốc độ (CPU i5-14400): ~23 giây quét cho mỗi phút video khi bật cả ba mục, cộng thời gian mã hóa clip. Mỗi giây
+    có bạo lực tốn thêm ~0,4 giây để tìm vùng cần che (video bạo lực suốt 1 phút: ~30 giây cho riêng mục này).
   - Giới hạn — **hãy xem lại video trước khi đăng**:
     - Nhận diện tự động có thể **bỏ sót hoặc che nhầm** (ví dụ cảnh quyền anh, phim hành động có thể bị coi là bạo lực;
       góc quay lạ, ảnh tối, hoạt hình có thể bị sót). Ngưỡng mới chỉ được chỉnh trên ít ảnh mẫu, chưa thử nhiều video thật.

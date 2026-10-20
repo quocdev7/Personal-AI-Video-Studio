@@ -100,7 +100,11 @@ Quy tắc phụ thuộc: `ui → services → jobs/projects → modules → medi
 
 ### modules/safety (Kiểm duyệt, dùng trong tác vụ "Tạo clip ngắn")
 - `scan.py` — một lượt FFmpeg xuất khung (4 khung/giây, ≤ 640 px) → NudeNet mọi khung, CLIP 1 khung/giây, OCR 1
-  khung/giây → `Detection(t, kind, box | cả khung, hold)`; `intervals()` gom thành đoạn cho báo cáo.
+  khung/giây → `Detection(t, kind, box, hold)`; `intervals()` gom thành đoạn cho báo cáo. Khung CLIP vượt ngưỡng
+  được định vị (`ViolenceClassifier.localize`): chấm CLIP từng cửa sổ vuông 40% cạnh ngắn (bước nửa cửa sổ, một batch
+  ~0,4 s), giữ cửa sổ đỉnh + các cửa sổ ≥ đỉnh − 0,1 với tổng diện tích ≤ 35% khung. Không dùng ngưỡng tuyệt đối cho
+  cửa sổ vì cảnh bạo lực rõ làm gần như mọi cửa sổ vượt ngưỡng (= che cả khung, không xem được). `box=None` (cả khung)
+  chỉ còn được đọc từ kết quả quét đã lưu của bản cũ.
 - `detect.py` — onnxruntime CPU, **tắt spin** (nhiều mô hình chạy xen kẽ). NudeNet: tiền/hậu xử lý viết lại theo
   nudenet 3.4.2, không cần cv2; lưu ý mô hình nhận **BGR** (thư viện gốc đảo kênh hai lần) và nội suy kiểu cv2
   INTER_LINEAR — đã kiểm bằng test so với thư viện gốc. CLIP: điểm = tổng xác suất softmax của các câu "nguy hiểm"

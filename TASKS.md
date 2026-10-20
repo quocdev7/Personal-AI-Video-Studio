@@ -2,7 +2,7 @@
 
 Trạng thái: **Đã test** = có test tự động chạy qua · **Đã làm, chưa test** · **Chưa làm** · **Bị chặn** (cần quyết định/tài nguyên).
 
-Lần chạy test gần nhất: 2026-10-20, `uv run pytest` → **180 passed, 1 skipped**
+Lần chạy test gần nhất: 2026-10-20, `uv run pytest` → **184 passed, 1 skipped**
 (test gọi Ollama thật, chỉ chạy khi đặt `PAS_TEST_OLLAMA=1` — đã chạy riêng ngày 2026-10-19: passed),
 Windows 11, Python 3.12.13, FFmpeg 9.0.2 (bản build Gyan), RapidOCR 1.4.4, Ollama 0.40.5 + qwen2.5:7b,
 NudeNet 3.4.2, onnxruntime (CPU).
@@ -73,7 +73,8 @@ dịch ~3–5 s mỗi câu với qwen2.5:7b.
 | Việc | Trạng thái |
 |---|---|
 | Khỏa thân (NudeNet 320n, chạy bằng onnxruntime, không cần OpenCV): che đúng vùng ngực nữ / sinh dục / mông / hậu môn lộ | Đã test: tiền/hậu xử lý khớp thư viện gốc (so trực tiếp với `nudenet` trên 5 kích thước ảnh + 17 ảnh mẫu ngoài repo: cùng lớp, cùng điểm, cùng hộp) |
-| Bạo lực / máu me (CLIP ViT-B/32 zero-shot, 1 khung/giây, cần ≥ 2 giây liên tiếp): che cả khung | Đã test (logic điểm + gom đoạn; mô hình thật trên 17 ảnh mẫu); **ngưỡng chỉ chỉnh trên 17 ảnh** |
+| Bạo lực / máu me (CLIP ViT-B/32 zero-shot, 1 khung/giây, cần ≥ 2 giây liên tiếp) | Đã test (logic điểm + gom đoạn; mô hình thật trên 17 ảnh mẫu); **ngưỡng chỉ chỉnh trên 17 ảnh** |
+| Bạo lực: che vùng nghi vấn nhất thay vì cả khung (cửa sổ CLIP 40% cạnh ngắn, chọn theo đỉnh, ≤ 35% khung) | Đã test: unit (cửa sổ, chọn, `localize` với phiên giả), FFmpeg (vùng định vị mờ, phần còn lại giữ nguyên), mô hình thật trên 9 ảnh bạo lực (vùng che 22–35%, xem bằng mắt: đúng người bị hạ đo ván / vết thương / cú đấm) và video ghép 18 s qua cả tác vụ. **Ô che khá thô, đổi mỗi giây; chưa thử video thật chuyển động nhanh** |
 | Chữ thô tục trên hình (RapidOCR + danh sách từ, sửa được; Latin theo nguyên từ, CJK theo chuỗi con, chuẩn hóa NFC) | Đã test (unit + video qua FFmpeg) |
 | Thay từ thô tục bằng `***` trong phụ đề Việt hóa (ASS/SRT) | Đã test |
 | Mặt nạ làm mờ (video xám ghi qua pipe) → làm mờ mạnh đúng vùng, đúng lúc; cắt cùng chỗ với từng clip | Đã test: so điểm ảnh trong/ngoài vùng, trong/ngoài khoảng thời gian |
@@ -86,7 +87,8 @@ dịch ~3–5 s mỗi câu với qwen2.5:7b.
 | Vũ khí đứng yên, biểu tượng thù ghét, ma túy, lời nói thô tục trong âm thanh | Chưa làm (ngoài phạm vi đã chọn) |
 
 Tốc độ đo trên máy này (i5-14400, CPU), video 60 giây 720p: khỏa thân 7,8 s, bạo lực 5,3 s, chữ 9,1 s, cả ba 23 s
-(~2,6 lần nhanh hơn thời gian thực), chưa tính thời gian mã hóa clip.
+(~2,6 lần nhanh hơn thời gian thực), chưa tính thời gian mã hóa clip. Định vị bạo lực tốn thêm ~0,4 s cho mỗi giây
+bị gắn cờ: video 60 s bạo lực suốt → mục bạo lực 29 s (thay vì 5,3 s).
 
 ## Giai đoạn 5–8
 Chưa làm. Xem [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
@@ -112,3 +114,14 @@ Chưa làm. Xem [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
   quét chữ 46–57 s và dao động mạnh cho 60 s video, cả ba loại 133 s. Tắt spin cho phiên của ứng dụng và cho RapidOCR
   (thư viện không có tùy chọn → tạm thay hàm tạo SessionOptions lúc khởi tạo) → chữ 9 s, cả ba 23 s, ổn định.
   Việt hóa phụ đề dùng chung `load_engine` nên cũng được hưởng lợi.
+- Người dùng báo: bạo lực bị che **cả màn hình**, không xem được gì. Nguyên nhân: CLIP chỉ cho điểm cả ảnh nên bản
+  đầu che cả khung. Thử chấm từng cửa sổ với ngưỡng tuyệt đối → cảnh bạo lực rõ có 11/12–14/15 cửa sổ vượt ngưỡng, vẫn
+  gần như cả khung. Sửa: cửa sổ nhỏ hơn (40% cạnh ngắn), chọn tương đối theo cửa sổ điểm cao nhất, giới hạn ≤ 35%
+  khung, không bao giờ che cả khung.
+- Thử trên video thật `docs/1020 - phần 1.mp4` (phim cổ trang 3 phút, bản 9:16 nền mờ do bản cũ xuất): vẫn che gần
+  hết khung. Nguyên nhân: mỗi vùng bạo lực được giữ ±1 s trong khi mẫu cách nhau 1 s → mỗi khung nhận vùng của 2–3 giây
+  kề nhau, cộng dồn vượt xa giới hạn 35%. Sửa: `VIOLENCE_HOLD` 1.0 → 0.45 (mỗi khung chỉ nhận vùng của mẫu gần nhất,
+  không hở, không chồng); thêm test. Chạy lại: phần lớn cảnh chỉ còn một ô che, phần còn lại xem được. **Còn lại:**
+  video đầu vào đã là 9:16 nền mờ thì giới hạn 35% tính trên cả khung dọc, có thể phủ gần hết dải hình 16:9 ở giữa;
+  quét video dọc chậm hơn (~350 s cho 180 s) vì khung mẫu 640×1138. Những đoạn bản cũ đã làm mờ cả khung trong file
+  này không khôi phục được — cần video gốc để kiểm tra đầy đủ.
