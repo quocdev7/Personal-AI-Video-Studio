@@ -14,7 +14,7 @@ import pytest
 
 from conftest import UNICODE_DIR
 from pas.core.config import Settings
-from pas.core.errors import DependencyMissing, InvalidInput
+from pas.core.errors import DependencyMissing, ExternalToolError, InvalidInput
 from pas.jobs.models import JobStatus
 from pas.media.ffmpeg import CREATE_NO_WINDOW, probe
 from pas.modules.clips.tasks import KIND, folder_name, plan_segments, validate, vietsub_filter
@@ -105,6 +105,9 @@ def test_parse_items_filters_bad_output():
     ]}
     assert parse_items(data, {0, 1, 2, 3, 4}) == {0: "Xin chào"}
     assert parse_items({}, {0}) == {} and parse_items([], {0}) == {}  # type: ignore[arg-type]
+    # Mô hình chép số thứ tự dòng vào bản dịch: chỉ bỏ đúng id của dòng, không đụng số khác.
+    data = {"items": [{"id": 22, "vi": "22: sau đó"}, {"id": 5, "vi": "1,5 carat"}, {"id": 7, "vi": "3: ba"}]}
+    assert parse_items(data, {22, 5, 7}) == {22: "sau đó", 5: "1,5 carat", 7: "3: ba"}
 
 
 def test_build_prompt():
@@ -160,6 +163,7 @@ def test_translate_lines_skips_done():
 class _FakeOllama(BaseHTTPRequestHandler):
     models = ["qwen2.5:7b"]
     chat_requests: list[dict] = []
+    fail_next = 0  # số yêu cầu chat tiếp theo trả 500
 
     def log_message(self, *a):
         pass
@@ -181,6 +185,10 @@ class _FakeOllama(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         type(self).chat_requests.append(body)
+        if type(self).fail_next > 0:
+            type(self).fail_next -= 1
+            self.send_error(500)
+            return
         user = body["messages"][-1]["content"]
         items = [{"id": int(ln.split(":", 1)[0]), "vi": f"Phụ đề Việt số {ln.split(':', 1)[0]}"}
                  for ln in user.splitlines()]
@@ -192,6 +200,7 @@ class _FakeOllama(BaseHTTPRequestHandler):
 def fake_ollama():
     _FakeOllama.models = ["qwen2.5:7b"]
     _FakeOllama.chat_requests = []
+    _FakeOllama.fail_next = 0
     server = ThreadingHTTPServer(("127.0.0.1", 0), _FakeOllama)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
@@ -208,6 +217,17 @@ def test_ollama_ready_and_chat(fake_ollama):
     req = _FakeOllama.chat_requests[0]
     assert req["stream"] is False and req["format"]["required"] == ["items"]
     assert req["options"]["num_predict"] > 0  # luôn giới hạn token
+
+
+def test_ollama_server_error_retried_once(fake_ollama):
+    client = OllamaClient(fake_ollama, "qwen2.5:7b")
+    _FakeOllama.fail_next = 1
+    assert client.chat_json("0: 你好", 50)["items"][0]["id"] == 0
+    assert len(_FakeOllama.chat_requests) == 2
+    _FakeOllama.fail_next = 2
+    with pytest.raises(ExternalToolError, match="Gọi Ollama thất bại"):
+        client.chat_json("0: 你好", 50)
+    assert len(_FakeOllama.chat_requests) == 4
 
 
 def test_ollama_missing_model(fake_ollama):

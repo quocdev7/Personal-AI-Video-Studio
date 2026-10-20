@@ -37,7 +37,9 @@ Mô hình AI chạy trong thread vẫn hủy được ở ranh giới đoạn (c
 ### 1.4. Nhận dạng giọng nói (Giai đoạn 3)
 
 faster-whisper (MIT; mô hình Whisper của OpenAI — MIT) với CTranslate2 int8 trên CPU.
-Không có CUDA nên mặc định `small` (cân bằng) và cho chọn `medium` / `large-v3-turbo` khi cần chính xác hơn.
+Không có CUDA nên dự kiến mặc định `small` (cân bằng) và cho chọn `medium` / `large-v3-turbo` khi cần chính xác hơn.
+**Đã làm trước trong "Làm lại video"** (2026-10-20): người dùng chọn `large-v3-turbo` (1,6 GB) vì nguồn chủ yếu tiếng Trung
+cần độ chính xác; đo thực tế ~1 phút 40 giây cho video 3 phút 12 giây trên i5-14400 (int8, VAD).
 
 ## 2. Phân lớp
 
@@ -118,6 +120,38 @@ Quy tắc phụ thuộc: `ui → services → jobs/projects → modules → medi
   đổi tên; chỉ tải dữ liệu trọng số, không chạy file thực thi.
 - RapidOCR (`vietsub/ocr.py::load_engine`) cũng được tắt spin bằng cách tạm thay hàm tạo SessionOptions khi khởi tạo.
 
+### modules/remake (Làm lại video — trang "Làm lại video", 4 tác vụ)
+- `project.py` — thư mục dự án `<tên video> - làm lại` cạnh thư mục đầu ra; `remake.json` (đường dẫn nguồn, transcript,
+  bản dịch, kịch bản theo phần có dòng nguồn `src`, ghi nguồn) dùng chung cho cả 4 bước; ghi nguyên tử. Video gốc chỉ đọc.
+- `asr.py` — FFmpeg tách WAV 16 kHz mono vào thư mục tạm → faster-whisper (int8, VAD, mốc thời gian từng từ) → câu
+  ngắn vừa phụ đề (tách theo dấu câu/khoảng nghỉ). Báo tiến trình theo vị trí đoạn; hủy ở ranh giới đoạn.
+- `script.py` — dùng lại `OllamaClient` của vietsub. (1) ngữ cảnh từ ≤ 6000 ký tự transcript: lĩnh vực + tóm tắt +
+  nghĩa **tiếng Anh** của ≤ 12 thuật ngữ/tên riêng (hỏi bằng tiếng Anh, yêu cầu đặt sau transcript; loại câu trả lời
+  còn chữ Hán, loại thuật ngữ không có nguyên văn trong transcript). Lý do (đo trên video thật): qwen2.5:7b hỏi bằng
+  tiếng Việt thì trả lời bằng tiếng Trung, và tự chọn thuật ngữ tiếng Việt sai ("pavilion" → "cánh đồng") trong khi
+  nghĩa tiếng Anh đúng — nên bảng thuật ngữ chỉ là gợi ý nghĩa cho bước dịch, không phải bản dịch bắt buộc;
+  (2) dịch **qua tiếng Anh** (nguồn → Anh → Việt; nguồn tiếng Anh bỏ lượt 1), mỗi lượt theo lô 8 câu kèm 3 câu trước,
+  kiểm tra không còn chữ Hán, dịch lại riêng câu lỗi, lưu từng lô (`translation_en`, `translation`) để chạy tiếp. Lý do:
+  dịch thẳng Trung → Việt bằng qwen2.5:7b chèn chữ Hán giữa câu và đổi tên vật (粉蓝宝 → "kim cương"), dịch qua tiếng
+  Anh thì không — đổi lại gấp đôi số lượt gọi mô hình; (3) viết lại từng phần 30 dòng thành đoạn lời kể có `src` (dòng đầu–cuối) — bắt buộc phủ ≥ 60% dòng nguồn;
+  hook từ chi tiết hấp dẫn nhất (bỏ 10% dòng đầu — lời chào/giới thiệu kênh — để hook không lặp đoạn mở đầu) + lời
+  kêu gọi cuối. Hook chép nguyên văn các dòng nguồn (`_is_copy`) bị thử lại; tiền tố `N:` mô hình chép từ prompt chỉ
+  bị bỏ khi N là id dòng (`_strip_ids`, cả ở `parse_items` của vietsub). Prompt dịch/viết lại yêu cầu giữ đúng tên vật
+  liệu/loài/người — không đưa ví dụ "đừng dịch thành kim cương" vì đo thực tế ví dụ phủ định làm mô hình dùng đúng
+  từ đó nhiều hơn (7 câu → 1 câu).
+- `tts.py` — Piper 1.8 (`PiperVoice`, onnxruntime CPU) đọc từng câu; tông = `length_scale` / `noise_scale` /
+  `noise_w_scale` + khoảng nghỉ; câu chứa âm vị giọng không có bị báo trước. `voice.json` ghi mốc từng câu và gắn đoạn
+  giọng với phần kịch bản (so khớp văn bản đã chuẩn hóa) — người dùng sửa kịch bản thì phần không khớp dựng theo vị trí.
+- `edit.py` — chuyển cảnh: FFmpeg xuất khung 64×36 xám 4 hình/giây, chênh lệch trung bình vượt ngưỡng = cắt → shot.
+  Mỗi đoạn giọng → khoảng thời gian nguồn (từ `src` của phần kịch bản) → mảnh 1,2–3 s trong shot, tránh dùng lại, nới
+  rộng nếu thiếu; tổng = thời lượng đoạn giọng. Mỗi mảnh mã hóa riêng (crop/nền mờ, zoom, làm mờ phụ đề cũ theo
+  `vietsub.ocr`), ghép bằng concat demuxer rồi trộn giọng + tiếng gốc (tùy chọn) và đốt ASS (tiêu đề + phụ đề câu).
+- `seo.py` — LLM sinh tiêu đề/mô tả/từ khóa/hashtag/tệp người xem (JSON schema, kiểm tra độ dài, không chữ Hán);
+  thumbnail: chấm khung (độ nét Laplace, độ sáng, độ bão hòa) → 3 thời điểm cách nhau → che chữ cũ → 1280×720 → Pillow
+  vẽ chữ có viền (font hệ thống có dấu tiếng Việt).
+- `models.py` — gói tải qua `model.download` dùng chung (URL cố định theo commit, kiểm tra kích thước + SHA-256).
+- `tasks.py` — `remake.script/voice/edit/seo`; `validate` báo lỗi sớm (thiếu gói/mô hình/Ollama/bước trước).
+
 ### ui
 - `JobEventBridge(QObject)` nhận callback từ thread worker và phát Qt signal (queued connection) để trang cập nhật trên main thread.
 - Trang chưa có backend hiển thị **mờ** trong thanh điều hướng với chú thích giai đoạn — không có nút giả.
@@ -154,3 +188,9 @@ Thời gian lưu ISO-8601 UTC. Xóa dự án chỉ xóa bản ghi, **không** đ
 - Kiểm duyệt: lời gọi Internet duy nhất là tải mô hình CLIP khi người dùng bấm và xác nhận (huggingface.co, URL cố
   định theo commit, kiểm tra SHA-256). Giấy phép: NudeNet (MIT, kèm mô hình 320n), onnxruntime (MIT), Pillow (MIT-CMU),
   CLIP ViT-B/32 (MIT, OpenAI; bản ONNX của Xenova).
+- Làm lại video: tải mô hình chỉ khi người dùng bấm và xác nhận (hiện dung lượng + giấy phép): Whisper large-v3-turbo
+  bản CTranslate2 (1,6 GB, MIT — huggingface.co/dropbox-dash), giọng Piper (huggingface.co/rhasspy/piper-voices, URL cố
+  định theo commit, SHA-256): vais1000 (63 MB; mô hình MIT, dữ liệu CC BY 4.0 → ghi nguồn), vivos (28 MB; dữ liệu
+  CC BY-NC-SA 4.0 → **chỉ phi thương mại**). Thư viện: faster-whisper (MIT), CTranslate2 (MIT), piper-tts 1.8
+  (**GPL-3.0-or-later**, kèm espeak-ng GPL — người dùng đã chấp thuận; ứng dụng dùng cá nhân, không phân phối),
+  Pillow (MIT-CMU). Ghi nguồn video gốc + giọng đọc được thêm tự động vào `SEO.txt`.

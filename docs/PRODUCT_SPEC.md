@@ -74,6 +74,29 @@ MP4 H.264/AAC; độ phân giải, FPS, bitrate/CRF, tỷ lệ khung hình; nhú
 ### Module G — Kiểm tra trước khi đăng (P2, phần kỹ thuật cơ bản MVP)
 Kiểm tra độ phân giải/tỷ lệ, đoạn im lặng dài, timestamp phụ đề bất thường; checklist quyền sử dụng (video, nhạc, hình, giọng). Ứng dụng **không** tuyên bố chỉnh sửa giúp tránh bản quyền hay bảo đảm điều kiện kiếm tiền.
 
+### Module H — Làm lại video (đã làm trước một phần các module B, E, F theo yêu cầu 2026-10-20)
+Trang **Làm lại video**, 4 bước dùng chung một thư mục dự án `<tên video> - làm lại` (`remake.json` + file đầu ra);
+video gốc chỉ được đọc. Mỗi bước là một tác vụ nền riêng, chạy lại thì dùng lại kết quả đã có.
+
+1. **Lấy SUB & viết lại** (`remake.script`): Whisper large-v3-turbo (CPU, int8) → `transcript gốc.srt`;
+   LLM cục bộ (Ollama qwen2.5:7b) tóm tắt chủ đề + nghĩa thuật ngữ → dịch qua tiếng Anh theo lô kèm ngữ cảnh → `bản dịch.srt`;
+   viết lại thành lời kể (mở đầu gây tò mò lấy từ chi tiết hấp dẫn nhất, thân bài theo từng phần, lời kêu gọi cuối)
+   → `kịch bản.txt`. Ba phong cách: kể chuyện / video ngắn / tài liệu.
+2. **Giọng đọc mới** (`remake.voice`): dán/sửa kịch bản → Piper TTS (giọng vais1000 hoặc vivos 65 người đọc),
+   4 tông (tự nhiên / nhanh / chậm rãi / biểu cảm — chỉ chỉnh tốc độ, độ biểu cảm, khoảng nghỉ) →
+   `giọng đọc.wav` + mốc thời gian từng câu `voice.json`.
+3. **Dựng lại video** (`remake.edit`): tìm chuyển cảnh → cắt mảnh 1,2–3 s khớp từng đoạn lời kể (hình đúng nội dung
+   đang kể), cảnh của hook đưa lên đầu (đổi thứ tự), zoom nhẹ xen kẽ, khung 9:16 / 1:1 / 16:9 / giữ nguyên (crop giữa
+   hoặc nền mờ), làm mờ dải phụ đề cũ, tiêu đề + phụ đề từng câu theo giọng đọc, nhạc/tiếng gốc nhỏ dần tùy chọn →
+   `video mới.mp4`, thời lượng đúng bằng giọng đọc.
+4. **Thumbnail + SEO** (`remake.seo`): 3 thumbnail 1280×720 từ khung hình nét/sáng nhất, chữ lớn có viền;
+   tiêu đề gây tò mò, mô tả, từ khóa, hashtag, tệp người xem → `SEO.txt` (kèm ghi nguồn video gốc và giọng đọc).
+
+Giới hạn trung thực: đầu ra của LLM cần người xem lại; **từ khóa không có dữ liệu lượng tìm kiếm** (không gọi dịch vụ
+ngoài); làm lại **không** làm mất bản quyền của video gốc — người dùng phải có quyền sử dụng nguồn. Giọng vivos chỉ
+dùng phi thương mại (CC BY-NC-SA) và đọc sai một số dấu huyền/nặng; vais1000 yêu cầu ghi nguồn (CC BY 4.0).
+Không tự đăng video lên nền tảng nào.
+
 ## 5. Yêu cầu phi chức năng
 
 | Mã | Yêu cầu |

@@ -2,10 +2,10 @@
 
 Trạng thái: **Đã test** = có test tự động chạy qua · **Đã làm, chưa test** · **Chưa làm** · **Bị chặn** (cần quyết định/tài nguyên).
 
-Lần chạy test gần nhất: 2026-10-20, `uv run pytest` → **184 passed, 1 skipped**
+Lần chạy test gần nhất: 2026-10-21, `uv run pytest` → **212 passed, 1 skipped**
 (test gọi Ollama thật, chỉ chạy khi đặt `PAS_TEST_OLLAMA=1` — đã chạy riêng ngày 2026-10-19: passed),
 Windows 11, Python 3.12.13, FFmpeg 9.0.2 (bản build Gyan), RapidOCR 1.4.4, Ollama 0.40.5 + qwen2.5:7b,
-NudeNet 3.4.2, onnxruntime (CPU).
+NudeNet 3.4.2, onnxruntime (CPU), faster-whisper + large-v3-turbo, piper-tts 1.8 (giọng vais1000, vivos).
 
 ## Giai đoạn 1 — Khảo sát & tài liệu
 | Việc | Trạng thái |
@@ -90,6 +90,24 @@ Tốc độ đo trên máy này (i5-14400, CPU), video 60 giây 720p: khỏa th�
 (~2,6 lần nhanh hơn thời gian thực), chưa tính thời gian mã hóa clip. Định vị bạo lực tốn thêm ~0,4 s cho mỗi giây
 bị gắn cờ: video 60 s bạo lực suốt → mục bạo lực 29 s (thay vì 5,3 s).
 
+## Làm lại video (Module H — trang "Làm lại video", 4 bước)
+Thử trên video thật `docs/1276877940-1-192.mp4` (4 phút 52 giây, 1280×720, tiếng Trung, cắt lại đá sapphire) ngày
+2026-10-20/21, máy i5-14400 CPU, chạy từng tác vụ thật (không qua UI) bằng script ngoài repo.
+
+| Việc | Trạng thái |
+|---|---|
+| 1. Transcript gốc (Whisper large-v3-turbo, CPU int8) → `transcript gốc.srt` | Đã test (unit) + video thật: 104 câu, nhận đúng tiếng Trung, ~1 phút 50 giây |
+| 1. Đọc hiểu ngữ cảnh (lĩnh vực, tóm tắt, thuật ngữ) | Đã test + video thật: "gemstone cutting… re-cutting a pink-blue sapphire", ~110 s |
+| 1. Dịch theo ngữ cảnh (qua tiếng Anh) → `bản dịch.srt` | Đã test + video thật: **102/104 câu**; 2 câu (74, 97) mô hình trả chữ Hán cả 2 lần → bỏ trống + cảnh báo; ~9,5 phút |
+| 1. Viết lại lời kể + hook + lời kêu gọi → `kịch bản.txt` | Đã test + video thật: 21 phần, 3676 ký tự (bản dịch 3700) — **không ngắn hơn**; ~6 phút + hook 41 s. Hook: "Xem cách một viên sapphire hồng xanh thay đổi ngoạn mục sau khi được cắt lại!" |
+| 2. Giọng đọc mới (Piper, chọn giọng + tông) → `giọng đọc.wav` | Đã test + video thật: vais1000, tông tự nhiên, 192,3 s, 21/21 phần khớp kịch bản, 8 s. **Chưa nghe bằng tai** |
+| 3. Dựng lại video (cắt mảnh ngắn, đổi thứ tự, zoom/crop 9:16, che phụ đề cũ, chữ Việt, khớp giọng) → `video mới.mp4` | Đã test (FFmpeg thật trên video tổng hợp) + video thật: 192,3 s = giọng, 1080×1920 H.264/AAC, 68 MB, 75 mảnh từ 66 shot, 152 câu chữ, 94 vùng làm mờ, 157 s. Xem 12 khung hình bằng mắt: đúng |
+| 4. Thumbnail + tiêu đề + từ khóa → `thumbnail 1–3.jpg`, `SEO.txt` | Đã test + video thật: 3 thumbnail 1280×720 (xem bằng mắt), 123 s. Từ khóa do mô hình đề xuất, **không có số liệu tìm kiếm thật** |
+| Tải mô hình Whisper / giọng đọc (hiện dung lượng + giấy phép, hỏi trước) | Đã test (máy chủ cục bộ); đã tải thật large-v3-turbo, vais1000, vivos |
+| Trang UI (4 bước, mở dự án cũ, khóa bước chưa đủ điều kiện) | Đã test (offscreen); mở ứng dụng thật trên desktop, trang hiển thị đúng (chụp màn hình). **Chưa bấm chạy 4 bước từ UI bằng tay** |
+| Chạy lại sau gián đoạn (dùng lại transcript, bản dịch từng lô) | Đã làm + dùng thật khi chạy lại bước 1; **chưa có test gián đoạn riêng** |
+| Video dài (> 10 phút) | **Chưa test** |
+
 ## Giai đoạn 5–8
 Chưa làm. Xem [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
@@ -99,6 +117,10 @@ Chưa làm. Xem [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 - Chất lượng dịch của qwen2.5:7b ở mức khá: câu đúng ý nhưng đôi khi cứng/sai xưng hô; luôn cần xem lại trước khi đăng.
 - Dịch: NLLB giấy phép CC-BY-NC (phi thương mại) — cần duyệt nếu chọn.
 - Chưa có máy Windows 10 để kiểm thử.
+- Làm lại video: video mới **vẫn là nội dung của người khác** — không xóa bản quyền; logo/watermark gốc
+  (阿豆彩宝切割工作室, bilibili) vẫn còn trên hình (cố ý không xóa). Giọng vais1000 cần ghi nguồn CC BY 4.0.
+- Làm lại video: chất lượng lời Việt còn lỗi (xem mục sửa lỗi bên dưới) — bắt buộc đọc và sửa `kịch bản.txt` trước bước 2.
+- Việt hóa phụ đề (vietsub) vẫn dịch thẳng Trung → Việt — có thể gặp lỗi lẫn chữ Hán/đổi tên vật như đã thấy ở Làm lại video.
 - Chưa kiểm thử ổ đĩa đầy thật (mới giả lập).
 
 ## Sửa lỗi phát hiện khi test (GĐ2)
@@ -125,3 +147,24 @@ Chưa làm. Xem [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
   video đầu vào đã là 9:16 nền mờ thì giới hạn 35% tính trên cả khung dọc, có thể phủ gần hết dải hình 16:9 ở giữa;
   quét video dọc chậm hơn (~350 s cho 180 s) vì khung mẫu 640×1138. Những đoạn bản cũ đã làm mờ cả khung trong file
   này không khôi phục được — cần video gốc để kiểm tra đầy đủ.
+
+## Sửa lỗi phát hiện khi test (Làm lại video, video thật)
+- Hỏi ngữ cảnh bằng tiếng Việt → qwen2.5:7b trả lời bằng tiếng Trung → hỏi bằng tiếng Anh, loại câu trả lời còn chữ Hán.
+- Mô hình ghi thuật ngữ `src` bằng tiếng Anh dù được yêu cầu chép nguyên văn → bảng thuật ngữ bị lọc sạch → chấp nhận `src` chữ Latin.
+- Dịch thẳng Trung → Việt chèn chữ Hán giữa câu ("hiệu果") và đổi 粉蓝宝 thành "kim cương" → dịch qua tiếng Anh.
+- Prompt có ví dụ "sapphire không phải kim cương" lại làm mô hình viết "kim cương" nhiều hơn (A/B: 7 câu) → thay bằng
+  quy tắc giữ đúng tên vật liệu/loài/người (còn 1 câu); thêm quy tắc tương tự cho bước viết lại/hook.
+- Hook lặp lại đúng lời mở đầu video → bỏ 10% dòng đầu khi tìm chi tiết cho hook.
+- Hook chép nguyên văn dòng 10–11 kèm tiền tố "10:"/"11:" → bỏ tiền tố id dòng, hook chép nguyên văn thì thử lại.
+- Bản dịch chép số thứ tự dòng ("22: sau đó") → chỉ bỏ đúng id của dòng đó (giữ "1,5 carat", "200: …").
+- Ollama trả HTTP 500 giữa chừng (lần chạy đầu, sau ~10 phút) → thử lại 1 lần; **chưa xác định nguyên nhân gốc** (không tái hiện được).
+- Tiêu đề khung "1. Lấy SUB & viết lại" mất ký tự "&" (Qt hiểu là phím tắt) → viết "&&".
+
+**Còn lại (chưa đạt, ghi nhận trung thực):**
+- 2/104 câu không dịch được (qwen trôi sang chữ Hán) → để trống, có cảnh báo trong log.
+- Kịch bản còn: 1 chỗ "kim cương" (câu 27), "ngọc trai" (câu 81), chữ Anh chưa dịch ("Try to tránh"), cụm dịch sát nghĩa
+  khó hiểu ("bậc lề của mái nhà"), tên người dẫn không thống nhất.
+- Viết lại không ngắn hơn bản dịch (mục tiêu 20–30%) → video mới 3 phút 12 giây so với gốc 4 phút 52 giây chủ yếu nhờ
+  đọc nhanh hơn lời gốc, không phải nhờ rút gọn nội dung.
+- Thumbnail 1 có chữ "Viết Lại Sapphire" và mô tả SEO có "được viết lại" — sai nghĩa do mô hình; người dùng chọn trong 3 phương án.
+- Kết quả LLM không ổn định giữa các lần chạy (cùng nhiệt độ 0,2) — mỗi lần chạy lại có thể ra lỗi khác.

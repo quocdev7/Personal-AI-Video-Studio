@@ -15,6 +15,7 @@ from pas.ui.pages.dashboard import DashboardPage
 from pas.ui.pages.jobs_pages import HistoryPage, QueuePage
 from pas.ui.pages.media_check import MediaCheckPage
 from pas.ui.pages.projects import ProjectsPage
+from pas.ui.pages.remake import RemakePage
 from pas.ui.pages.settings import SettingsPage
 
 log = logging.getLogger(__name__)
@@ -40,12 +41,14 @@ class MainWindow(QMainWindow):
         self.projects = ProjectsPage(services)
         self.media_check = MediaCheckPage(services)
         self.clips = ClipsPage(services)
+        self.remake = RemakePage(services)
         self.queue = QueuePage(services)
         self.history = HistoryPage(services)
         self.settings = SettingsPage(services)
         pages = [
             ("Tổng quan", self.dashboard),
             ("Tạo clip ngắn", self.clips),
+            ("Làm lại video", self.remake),
             ("Dự án", self.projects),
             ("Kiểm tra media", self.media_check),
             ("Hàng đợi", self.queue),
@@ -106,6 +109,7 @@ class MainWindow(QMainWindow):
             return
         self.media_check.on_job_event(event)
         self.clips.on_job_event(event)
+        self.remake.on_job_event(event)
         if not self._refresh_timer.isActive():
             self._refresh_timer.start()
 

@@ -1,8 +1,9 @@
 # Hướng dẫn sử dụng — Personal AI Studio 0.1.0
 
-> Phiên bản này gồm **nền tảng** (dự án, hàng đợi tác vụ, kiểm tra media) và **Tạo clip ngắn** (cắt + đổi khung,
-> tùy chọn Việt hóa phụ đề in trên hình và Kiểm duyệt). Tạo phụ đề từ giọng nói, chia theo cảnh/nội dung, xử lý âm
-> thanh và lồng tiếng sẽ có ở các bản sau (các mục này hiển thị mờ trong menu).
+> Phiên bản này gồm **nền tảng** (dự án, hàng đợi tác vụ, kiểm tra media), **Tạo clip ngắn** (cắt + đổi khung,
+> tùy chọn Việt hóa phụ đề in trên hình và Kiểm duyệt) và **Làm lại video** (transcript → dịch → viết lại lời kể →
+> giọng đọc mới → dựng lại video → thumbnail + SEO). Trang phụ đề riêng, chia theo cảnh/nội dung và xử lý âm thanh
+> sẽ có ở các bản sau (các mục này hiển thị mờ trong menu).
 
 ## Cài đặt (chạy từ mã nguồn)
 1. Cài FFmpeg: mở PowerShell, chạy `winget install Gyan.FFmpeg`, rồi mở lại PowerShell.
@@ -66,6 +67,37 @@
     - Không kiểm tra: vũ khí đứng yên, biểu tượng thù ghét, ma túy, lời nói thô tục trong âm thanh, chữ viết tay/nghệ
       thuật. Đọc chữ tiếng Việt có dấu kém hơn chữ Trung/Latin.
     - Làm mờ **không** thay đổi quyền tác giả của nội dung.
+- **Làm lại video** — biến một video (thường là tiếng Trung) thành video tiếng Việt mới với lời kể, giọng đọc,
+  cách dựng và thumbnail mới. Bốn bước, chạy lần lượt; mỗi bước lưu vào thư mục dự án `<tên video> - làm lại`, video
+  gốc không bị sửa. Có thể dừng giữa các bước, sửa file rồi chạy tiếp; *Mở dự án…* để mở lại dự án cũ.
+  - Cài một lần:
+    1. `uv sync --extra remake` (faster-whisper MIT, Piper GPL-3.0, RapidOCR, Pillow).
+    2. Ollama + `ollama pull qwen2.5:7b` như mục Việt hóa phụ đề (dịch và viết lại).
+    3. Trên trang: **Tải mô hình Whisper…** (1,6 GB, MIT) và **Tải giọng đọc…** (vais1000 63 MB hoặc vivos 28 MB) —
+       ứng dụng hiện dung lượng, giấy phép, nguồn và chỉ tải khi bạn bấm *Yes*.
+  - **1. Lấy SUB & viết lại nội dung** — chọn video, *Ngôn ngữ lời thoại* (tự nhận diện hoặc chọn), *Văn phong*
+    (kể chuyện / video ngắn / tài liệu) → **Chạy bước 1**. Kết quả: `transcript gốc.srt`, `bản dịch.srt` (tiếng Việt,
+    giữ mốc thời gian), `kịch bản.txt` (câu mở đầu gây tò mò lấy từ chi tiết hấp dẫn nhất, thân bài kể lại tự nhiên,
+    lời kêu gọi cuối). Kịch bản được đưa sẵn vào ô của bước 2.
+  - **2. Tạo giọng đọc mới** — sửa hoặc dán kịch bản (mỗi đoạn cách nhau một dòng trống), chọn *Giọng*, *Người đọc*
+    (vivos có 65 người), *Tông giọng* → **Chạy bước 2**. Kết quả: `giọng đọc.wav` (dùng riêng được) + `voice.json`.
+    Tông giọng chỉ đổi tốc độ, độ lên xuống và khoảng nghỉ — không đổi giới tính hay cảm xúc của giọng.
+  - **3. Dựng lại video theo giọng mới** — chọn *Khung hình* (9:16 / 1:1 / 16:9 / giữ nguyên), *Lấp khung*,
+    *Zoom* (zoom nhẹ xen kẽ hoặc không), phụ đề lời đọc mới, làm mờ chữ cũ ở đáy hình, *Giữ tiếng gốc* (0–100%),
+    *Tiêu đề trên video* → **Chạy bước 3**. Ứng dụng cắt cảnh thành mảnh 1,2–3 giây khớp với đoạn đang kể, đưa cảnh
+    của câu mở đầu lên trước → `video mới.mp4` dài đúng bằng giọng đọc.
+  - **4. Thumbnail + SEO** — *Ghi chú* (tùy chọn: tệp người xem, kênh…) → **Chạy bước 4**. Kết quả: 3 ảnh
+    `thumbnail 1.jpg`–`3.jpg` (1280×720) và `SEO.txt` (tiêu đề, mô tả, từ khóa, hashtag, tệp người xem, ghi nguồn).
+  - *Ghi nguồn video gốc* (ô trong mục Dự án) được in chữ nhỏ suốt video mới và thêm vào `SEO.txt`.
+  - Giới hạn — **hãy xem lại trước khi đăng**:
+    - Bản dịch / kịch bản / SEO do mô hình ngôn ngữ trên máy viết: có thể sai tên riêng, sai xưng hô, thêm thắt. Sửa
+      `kịch bản.txt` (hoặc ô bước 2) trước khi tạo giọng.
+    - **Từ khóa là đề xuất theo nội dung, không có số liệu lượt tìm kiếm thật** (ứng dụng không gọi dịch vụ ngoài).
+    - Giọng vivos: **chỉ dùng phi thương mại** (giấy phép dữ liệu CC BY-NC-SA) và đọc sai một số dấu huyền/nặng.
+      Giọng vais1000: phải ghi nguồn (CC BY 4.0) — `SEO.txt` đã có dòng ghi nguồn.
+    - Ghép cảnh tự động theo nội dung lời thoại gốc, không "xem" hình — có thể chọn cảnh chưa đẹp.
+    - Làm lại (dịch, đổi giọng, cắt ghép) **không** làm mất bản quyền của video gốc. Chỉ đăng khi bạn có quyền dùng
+      nội dung nguồn.
 - **Dự án** — nhóm video theo dự án với thư mục đầu vào/đầu ra. "Xóa khỏi danh sách" chỉ xóa bản ghi, **không xóa file**.
 - **Kiểm tra media** — chọn hoặc kéo thả file video/âm thanh → *Bắt đầu kiểm tra*. Kết quả: định dạng, thời lượng,
   độ phân giải, tỷ lệ khung (16:9, 9:16...), FPS, luồng âm thanh và cảnh báo (không có tiếng, thiếu thời lượng...).
@@ -78,7 +110,7 @@
 - File gốc chỉ được đọc. File kết quả không bao giờ ghi đè file có sẵn: nếu trùng tên, ứng dụng thêm ` (1)`, ` (2)`...
 - Đóng ứng dụng khi tác vụ đang chạy: tác vụ được dừng và đánh dấu **Bị gián đoạn**; mở lại và bấm *Chạy lại*.
 - Ứng dụng không tải lên, đăng hay chia sẻ video ở bất kỳ đâu. Chỉ kết nối Internet khi bạn chủ động tải mô hình
-  (hiện tại: mô hình bạo lực CLIP; luôn hiện dung lượng và giấy phép trước, kiểm tra SHA-256 sau khi tải).
+  (mô hình bạo lực CLIP, Whisper, giọng đọc Piper; luôn hiện dung lượng và giấy phép trước, kiểm tra SHA-256 sau khi tải).
 - **Bản quyền:** chỉnh sửa (cắt, dịch, lồng tiếng) **không** làm mất quyền tác giả của nội dung gốc. Chỉ đăng nội dung
   bạn sở hữu hoặc được phép sử dụng.
 
@@ -96,4 +128,6 @@
 | Cài đặt bị mất | File cấu hình hỏng được sao lưu thành `settings.corrupt-<thời gian>.json` cạnh `settings.json`. |
 | "Chưa tải mô hình nhận diện bạo lực" | Bấm *Tải mô hình bạo lực…* trên trang Tạo clip ngắn, hoặc bỏ chọn mục bạo lực. |
 | Tải mô hình báo sai mã SHA-256 / kích thước | File tải về bị hỏng hoặc khác bản đã kiểm tra — đã bị xóa; thử tải lại. Nếu vẫn lỗi, gửi log. |
+| "Chưa tải mô hình nhận dạng giọng nói" / "Chưa tải giọng đọc" | Bấm *Tải mô hình Whisper…* / *Tải giọng đọc…* trên trang Làm lại video. |
+| Bước 2–4 bị mờ | Chưa có dự án: chạy bước 1 hoặc *Mở dự án…*. Bước 3 cần đã chạy bước 2 (có `giọng đọc.wav`). |
 | Lỗi không mong đợi | Cài đặt → *Mở thư mục log*, gửi `app.log`. |

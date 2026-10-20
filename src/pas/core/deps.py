@@ -25,11 +25,12 @@ class DependencyStatus:
 
 OPTIONAL_PACKAGES = [
     # (tên import, mô tả, lệnh cài)
-    ("faster_whisper", "faster-whisper — nhận dạng giọng nói (Module B)", "uv sync --extra asr"),
+    ("faster_whisper", "faster-whisper (MIT) — nhận dạng giọng nói (Làm lại video)", "uv sync --extra asr"),
+    ("piper", "piper-tts (GPL-3.0) — giọng đọc tiếng Việt (Làm lại video)", "uv sync --extra tts"),
     ("rapidocr_onnxruntime", "RapidOCR — đọc phụ đề in trên hình (Việt hóa phụ đề)", "uv sync --extra vietsub"),
     ("nudenet", "NudeNet (MIT) — nhận diện khỏa thân (Kiểm duyệt)", "uv sync --extra safety"),
     ("onnxruntime", "onnxruntime (MIT) — chạy mô hình kiểm duyệt trên CPU", "uv sync --extra safety"),
-    ("PIL", "Pillow — xử lý ảnh cho mô hình kiểm duyệt", "uv sync --extra safety"),
+    ("PIL", "Pillow — xử lý ảnh (kiểm duyệt, thumbnail)", "uv sync --extra safety"),
 ]
 
 
@@ -42,6 +43,23 @@ def _clip_status(paths: AppPaths) -> DependencyStatus:
         return DependencyStatus(name, True, f"Đã tải — {sf_models.model_path(paths.models_dir, m)}", required=False)
     return DependencyStatus(name, False, f"Chưa tải ({m.size / 1e6:.0f} MB)",
                             "Ở trang 'Tạo clip ngắn', bật Kiểm duyệt rồi bấm 'Tải mô hình bạo lực…'.", required=False)
+
+
+def _remake_model_statuses(paths: AppPaths) -> list[DependencyStatus]:
+    from pas.modules.remake import models as rm_models
+    from pas.modules.safety import models as sf_models
+
+    packs = [(rm_models.WHISPER, "Ở trang 'Làm lại video' bấm 'Tải mô hình Whisper…'.")]
+    packs += [(v.pack, "Ở trang 'Làm lại video' → bước 2, chọn giọng rồi bấm 'Tải giọng đọc…'.")
+              for v in rm_models.VOICES.values()]
+    out = []
+    for pack, hint in packs:
+        name = f"{pack.title} ({pack.license})"
+        if sf_models.is_installed(paths.models_dir, pack):
+            out.append(DependencyStatus(name, True, "Đã tải", required=False))
+        else:
+            out.append(DependencyStatus(name, False, f"Chưa tải ({pack.size / 1e6:,.0f} MB)", hint, required=False))
+    return out
 
 
 def _ollama_status(settings: Settings) -> DependencyStatus:
@@ -86,6 +104,7 @@ def check_environment(settings: Settings, paths: AppPaths) -> list[DependencySta
             "" if installed else f"Cài khi cần dùng: `{install}`", required=False,
         ))
     results.append(_clip_status(paths))
+    results.extend(_remake_model_statuses(paths))
     results.append(_ollama_status(settings))
 
     min_free = int(settings.min_free_disk_gb * GB)

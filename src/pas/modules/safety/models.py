@@ -1,4 +1,5 @@
-"""Mô hình cho kiểm duyệt: NudeNet đi kèm gói pip; CLIP phải tải về (chỉ khi người dùng bấm tải và xác nhận).
+"""Tải mô hình AI (chỉ khi người dùng bấm tải và xác nhận). Kiểm duyệt: NudeNet đi kèm gói pip; CLIP phải tải về.
+Module khác (Làm lại video: Whisper, giọng Piper) dùng chung bộ tải qua `ModelPack` — một mô hình gồm nhiều file.
 
 Tải: URL cố định theo commit (không tự đổi phiên bản), ghi `*.part` rồi kiểm tra kích thước + SHA-256 mới đổi tên.
 Chỉ đọc dữ liệu (trọng số ONNX), không chạy file thực thi nào.
@@ -15,6 +16,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+from pas.core.disk import GB, ensure_free_space
 from pas.core.errors import DependencyMissing, ExternalToolError, InvalidInput
 from pas.jobs.context import JobContext
 from pas.jobs.registry import TaskRegistry, TaskSpec
@@ -50,20 +52,52 @@ CLIP_VISION = ModelFile(
     license="MIT (OpenAI CLIP, github.com/openai/CLIP)",
     source=f"huggingface.co/Xenova/clip-vit-base-patch32 (bản ONNX của openai/clip-vit-base-patch32), commit {CLIP_REVISION[:7]}",
 )
-MODELS = {CLIP_VISION.key: CLIP_VISION}
+
+
+@dataclass(frozen=True)
+class ModelPack:
+    """Mô hình gồm nhiều file (vd thư mục CTranslate2 của Whisper). `filename` của từng file có thể chứa thư mục con."""
+    key: str
+    title: str
+    files: tuple[ModelFile, ...]
+    license: str
+    source: str
+    note: str = ""  # điều kiện dùng cần người dùng biết trước khi tải (vd chỉ dùng phi thương mại)
+
+    @property
+    def size(self) -> int:
+        return sum(f.size for f in self.files)
+
+
+Model = ModelFile | ModelPack
+MODELS: dict[str, Model] = {CLIP_VISION.key: CLIP_VISION}
+
+
+def files_of(model: Model) -> tuple[ModelFile, ...]:
+    return model.files if isinstance(model, ModelPack) else (model,)
+
+
+def describe(model: Model) -> str:
+    """Nội dung hộp xác nhận trước khi tải: dung lượng, giấy phép, nguồn (bắt buộc hiện trước mọi lần tải)."""
+    text = (f"{model.title}\n\nDung lượng: {model.size / 1e6:,.0f} MB\nGiấy phép: {model.license}\n"
+            f"Nguồn: {model.source}")
+    note = getattr(model, "note", "")
+    return text + (f"\n\nLưu ý: {note}" if note else "")
 
 
 def model_path(models_dir: Path, model: ModelFile) -> Path:
     return Path(models_dir) / model.filename
 
 
-def is_installed(models_dir: Path, model: ModelFile) -> bool:
+def is_installed(models_dir: Path, model: Model) -> bool:
     """Kiểm tra nhanh theo kích thước (SHA-256 đã được kiểm khi tải)."""
-    path = model_path(models_dir, model)
-    try:
-        return path.stat().st_size == model.size
-    except OSError:
-        return False
+    for f in files_of(model):
+        try:
+            if model_path(models_dir, f).stat().st_size != f.size:
+                return False
+        except OSError:
+            return False
+    return True
 
 
 def require_runtime() -> None:
@@ -91,12 +125,14 @@ def require_model(models_dir: Path, model: ModelFile) -> Path:
     return model_path(models_dir, model)
 
 
-def download(model: ModelFile, models_dir: Path, ctx: JobContext) -> Path:
+def download(model: ModelFile, models_dir: Path, ctx: JobContext, done: int = 0, total: int | None = None) -> Path:
+    """`done`/`total`: số byte đã tải của cả gói và tổng gói (để thanh tiến trình chạy liền mạch qua nhiều file)."""
     final = model_path(models_dir, model)
+    total = total or model.size
     if is_installed(models_dir, model):
         ctx.log(f"Đã có {final.name}, không tải lại")
         return final
-    Path(models_dir).mkdir(parents=True, exist_ok=True)
+    final.parent.mkdir(parents=True, exist_ok=True)
     part = final.with_name(final.name + ".part")
     ctx.log(f"Tải {model.url} → {final}")
     req = urllib.request.Request(model.url, headers={"User-Agent": "PersonalAIStudio/0.1"})
@@ -115,7 +151,7 @@ def download(model: ModelFile, models_dir: Path, ctx: JobContext) -> Path:
                 f.write(chunk)
                 digest.update(chunk)
                 got += len(chunk)
-                ctx.report(got / model.size, f"Đã tải {got / 1e6:.1f}/{model.size / 1e6:.1f} MB")
+                ctx.report((done + got) / total, f"Đã tải {(done + got) / 1e6:.1f}/{total / 1e6:.1f} MB")
         if got != model.size:
             raise ExternalToolError(f"Tải chưa đủ: {got}/{model.size} byte.", "Kết nối bị ngắt. Bấm Chạy lại.")
         if digest.hexdigest() != model.sha256:
@@ -131,23 +167,42 @@ def download(model: ModelFile, models_dir: Path, ctx: JobContext) -> Path:
     return final
 
 
-def validate_download(params: dict, models: dict[str, ModelFile] | None = None) -> None:
+def download_model(model: Model, models_dir: Path, ctx: JobContext) -> Path:
+    """Tải mọi file của mô hình (file đã có đúng kích thước thì bỏ qua). Trả về file (ModelFile) hoặc thư mục gốc
+    chung của gói (ModelPack)."""
+    missing = sum(f.size for f in files_of(model) if not is_installed(models_dir, f))
+    if missing:
+        ensure_free_space(Path(models_dir), missing + GB // 2)
+    done, total = 0, model.size
+    paths = []
+    for f in files_of(model):
+        paths.append(download(f, models_dir, ctx, done, total))
+        done += f.size
+    if isinstance(model, ModelPack):
+        return Path(os.path.commonpath([str(p.parent) for p in paths]))
+    return paths[0]
+
+
+def validate_download(params: dict, models: dict[str, Model] | None = None) -> None:
     if params.get("model") not in (models or MODELS):
         raise InvalidInput(f"Mô hình không xác định: {params.get('model')!r}")
 
 
-def make_download_handler(models_dir: Path, models: dict[str, ModelFile] | None = None):
+def make_download_handler(models_dir: Path, models: dict[str, Model] | None = None):
     catalog = models or MODELS
 
     def run(ctx: JobContext) -> dict:
         model = catalog[ctx.params["model"]]
         ctx.report(0.0, f"Đang tải {model.title}")
-        path = download(model, models_dir, ctx)
+        path = download_model(model, models_dir, ctx)
         ctx.report(1.0, "Đã tải và kiểm tra mô hình")
         return {"model": model.key, "path": str(path), "size_bytes": model.size, "license": model.license}
 
     return run
 
 
-def register(registry: TaskRegistry, models_dir: Path) -> None:
-    registry.register(TaskSpec(DOWNLOAD_KIND, "Tải mô hình", make_download_handler(models_dir), validate_download))
+def register(registry: TaskRegistry, models_dir: Path, extra: dict[str, Model] | None = None) -> None:
+    """`extra`: mô hình của module khác dùng chung tác vụ tải."""
+    catalog = {**MODELS, **(extra or {})}
+    registry.register(TaskSpec(DOWNLOAD_KIND, "Tải mô hình", make_download_handler(models_dir, catalog),
+                               lambda params: validate_download(params, catalog)))

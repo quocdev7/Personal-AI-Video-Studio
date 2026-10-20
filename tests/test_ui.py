@@ -192,3 +192,93 @@ def test_render_result_safety():
     assert "a - kiểm duyệt.txt" in html and "không bảo đảm" in html
     none = render_result({**base, "safety": {**sf, "intervals": [], "counts": {"nudity": 0}}})
     assert "không phát hiện đoạn nào" in none
+
+
+def _fake_submit(window, monkeypatch, job_id=1):
+    submitted = []
+    monkeypatch.setattr(window.services.jobs, "submit",
+                        lambda kind, title, params: submitted.append((kind, params)) or type("J", (), {"id": job_id})())
+    return submitted
+
+
+def test_remake_steps_need_project(window, monkeypatch, tmp_path):
+    from pas.modules.remake import project
+
+    page = window.remake
+    assert page.btn_script.isEnabled()
+    assert not (page.btn_voice.isEnabled() or page.btn_edit.isEnabled() or page.btn_seo.isEnabled())
+    pdir = tmp_path / UNICODE_DIR / "v - làm lại"
+    pdir.mkdir(parents=True)
+    project.save(pdir, {"version": 1, "source": str(tmp_path / "v.mp4")})
+    (pdir / project.SCRIPT_TXT).write_text("Đoạn một.\n\nĐoạn hai.", encoding="utf-8")
+    page.set_project(pdir)
+    assert page.text.toPlainText() == "Đoạn một.\n\nĐoạn hai."
+    assert page.btn_voice.isEnabled() and page.btn_seo.isEnabled()
+    assert not page.btn_edit.isEnabled()  # chưa có giọng đọc
+    assert "kịch bản" in page.project_label.text()
+
+    submitted = _fake_submit(window, monkeypatch)
+    page.voice.setCurrentIndex(page.voice.findData("vivos"))
+    assert page.speaker.isEnabled() and page.speaker.maximum() == 64
+    page.speaker.setValue(3)
+    page.tone.setCurrentIndex(page.tone.findData("calm"))
+    page.btn_voice.click()
+    [(kind, p)] = submitted
+    assert kind == "remake.voice"
+    assert (p["project_dir"], p["voice"], p["speaker"], p["tone"]) == (str(pdir), "vivos", 3, "calm")
+    assert p["text"] == "Đoạn một.\n\nĐoạn hai."
+
+
+def test_remake_open_invalid_project_shows_error(window):
+    from pas.core.errors import InvalidInput
+
+    with pytest.raises(InvalidInput):
+        window.remake.set_project(window.services.paths.root)
+    assert window.remake.project_dir is None
+
+
+def test_remake_script_params_and_validation(window, monkeypatch, tmp_path):
+    shown = []
+    monkeypatch.setattr("pas.ui.pages.remake.show_error", lambda parent, exc, title: shown.append(exc))
+    window.remake.btn_script.click()  # chưa chọn video → lỗi từ validate, không tạo tác vụ
+    assert shown and window.remake.job_id is None
+    submitted = _fake_submit(window, monkeypatch)
+    page = window.remake
+    page.picker.set_path(str(tmp_path / "v.mp4"))
+    page.language.setCurrentIndex(page.language.findData("zh"))
+    page.style.setCurrentIndex(page.style.findData("short"))
+    page.btn_script.click()
+    assert submitted == [("remake.script", {"path": str(tmp_path / "v.mp4"), "language": "zh", "style": "short",
+                                            "output_dir": ""})]
+
+
+def test_remake_download_asks_first(window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    page = window.remake
+    submitted = _fake_submit(window, monkeypatch, job_id=9)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.No)
+    page.btn_whisper.click()
+    assert submitted == []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    page.btn_voice_dl.click()
+    assert submitted == [("model.download", {"model": "piper-vi_VN-vais1000-medium"})]
+    assert page.downloads == {9: "piper-vi_VN-vais1000-medium"} and not page.btn_voice_dl.isEnabled()
+
+
+def test_remake_render_results():
+    from pas.ui.pages.remake import render_result
+
+    s = render_result("remake.script", {"lines": 10, "translated": 9, "parts": 4, "model": "m", "topic": "<x>",
+                                        "failed": ["坏"], "files": ["D:/a/kịch bản.txt"]})
+    assert "10 câu thoại" in s and "&lt;x&gt;" in s and "kịch bản.txt" in s and "坏" in s
+    v = render_result("remake.voice", {"duration": 65.0, "segments": 5, "matched": 4, "wav": "D:/a/giọng đọc.wav",
+                                       "voice": "vais1000", "tone": "natural", "license": "CC BY 4.0", "note": ""})
+    assert "4 đoạn khớp" in v and "CC BY 4.0" in v
+    e = render_result("remake.edit", {"video": "D:/a/video mới.mp4", "width": 1080, "height": 1920, "duration": 65.0,
+                                      "size_bytes": 1000, "pieces": 30, "source_shots": 12, "captions": 20, "blurred": 3})
+    assert "1080×1920" in e and "30 cảnh ngắn" in e
+    o = render_result("remake.seo", {"thumbnails": [{"path": "D:/a/thumbnail 1.jpg", "text": "SỐC"}],
+                                     "seo_file": "D:/a/SEO.txt", "titles": ["T1"], "keywords": ["k"],
+                                     "hashtags": ["#h"], "audience": "a", "note": "Không có số liệu"})
+    assert "T1" in o and "thumbnail 1.jpg" in o and "Không có số liệu" in o

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import urllib.error
 import urllib.request
@@ -83,19 +84,34 @@ class OllamaClient:
             raise DependencyMissing(f"Ollama chưa có mô hình '{self.model}'.", install_hint(self.model))
 
     def chat_json(self, user: str, num_predict: int, temperature: float = 0.2,
-                  ctx: "JobContext | None" = None) -> dict:
+                  ctx: "JobContext | None" = None, system: str = SYSTEM_PROMPT, schema: dict = SCHEMA,
+                  num_ctx: int | None = None) -> dict:
+        """Một lượt chat, ép đầu ra theo JSON `schema`. JSON hỏng → {} (người gọi tự kiểm tra và thử lại)."""
+        options = {"temperature": temperature, "num_predict": num_predict}
+        if num_ctx:
+            options["num_ctx"] = num_ctx
         body = {
-            "model": self.model, "stream": False, "format": SCHEMA, "keep_alive": "10m",
-            "options": {"temperature": temperature, "num_predict": num_predict},
-            "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}],
+            "model": self.model, "stream": False, "format": schema, "keep_alive": "10m", "options": options,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         }
         result: dict = {}
 
         def _call():
-            try:
-                result["ok"] = self._request("/api/chat", body, timeout=self.timeout)
-            except Exception as exc:  # chuyển sang luồng chính để báo lỗi đúng chỗ
-                result["err"] = exc
+            for attempt in range(2):
+                try:
+                    result["ok"] = self._request("/api/chat", body, timeout=self.timeout)
+                    return
+                except urllib.error.HTTPError as exc:
+                    # Đo thật: Ollama 0.40 thỉnh thoảng hủy giữa chừng một lượt sinh và trả 500 không kèm lý do,
+                    # gửi lại đúng yêu cầu đó thì chạy bình thường → thử lại một lần, lặp lại thì báo lỗi.
+                    if exc.code >= 500 and attempt == 0 and not (ctx is not None and ctx.is_cancelled):
+                        log.warning("Ollama trả lỗi %s, thử lại một lần", exc.code)
+                        continue
+                    result["err"] = exc
+                    return
+                except Exception as exc:  # chuyển sang luồng chính để báo lỗi đúng chỗ
+                    result["err"] = exc
+                    return
 
         th = threading.Thread(target=_call, name="ollama-chat", daemon=True)
         th.start()
@@ -126,8 +142,8 @@ def build_prompt(lines: dict[int, str]) -> str:
     return "\n".join(f"{i}: {t}" for i, t in lines.items())
 
 
-def parse_items(data: dict, wanted: set[int]) -> dict[int, str]:
-    """Lấy bản dịch hợp lệ: id nằm trong lô, chuỗi không rỗng, không còn chữ Hán."""
+def parse_items(data: dict, wanted: set[int], reject: Callable[[str], bool] = has_cjk) -> dict[int, str]:
+    """Lấy bản dịch hợp lệ: id nằm trong lô, chuỗi không rỗng, không bị `reject` (mặc định: còn chữ Hán)."""
     out: dict[int, str] = {}
     items = data.get("items") if isinstance(data, dict) else None
     for item in items if isinstance(items, list) else []:
@@ -136,8 +152,9 @@ def parse_items(data: dict, wanted: set[int]) -> dict[int, str]:
         i, vi = item.get("id"), item.get("vi")
         if isinstance(i, bool) or not isinstance(i, int) or i not in wanted or not isinstance(vi, str):
             continue
-        vi = " ".join(vi.split())
-        if vi and not has_cjk(vi):
+        # Mô hình đôi khi chép luôn số thứ tự của dòng vào bản dịch ("22: sau đó") — chỉ bỏ đúng số id của dòng.
+        vi = re.sub(rf"^\s*{i}\s*[:.)]\s*", "", " ".join(vi.split()))
+        if vi and not reject(vi):
             out[i] = vi
     return out
 
