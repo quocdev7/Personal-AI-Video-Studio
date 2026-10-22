@@ -242,6 +242,16 @@ def test_plan_covers_voice_and_puts_hook_scene_first():
     assert all(p.zoom == 1.0 for p in edit.plan(segs, parts, lines, shots, 120.0, 38.5, "none"))
 
 
+def test_piece_filter_blurs_subtitle_starting_right_after_piece():
+    from pas.modules.vietsub.ocr import SubEvent
+
+    ev = SubEvent(10.0, 12.25, "两头呢是挺漏底的啊", (477.0, 591.0, 804.0, 633.0), 42.0, False, None)
+    f = edit.piece_filter(edit.Piece(0, 8.0, 2.0, 1.0, 0.0), [ev], 1280, 720, "original", "crop")
+    assert "between(t,1.700,2.000)" in f
+    logo = SubEvent(0.0, 300.0, "抖音", (10.0, 10.0, 90.0, 40.0), 30.0, True, None)
+    assert "boxblur" not in edit.piece_filter(edit.Piece(0, 8.0, 2.0, 1.0, 0.0), [logo], 1280, 720, "original", "crop")
+
+
 def test_split_caption_and_events():
     assert edit.split_caption("một hai ba bốn", 100) == ["một hai ba bốn"]
     parts = edit.split_caption("Viên sapphire hồng này, sau khi cắt lại, trở nên rực rỡ hơn hẳn trước đây", 32)

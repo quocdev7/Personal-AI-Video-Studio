@@ -11,6 +11,10 @@ from pathlib import Path
 from pas.modules.vietsub.ocr import Box, SubEvent, _iou, _union, _v_overlap
 
 MAX_BLUR_GROUPS = 24
+# OCR lấy mẫu SAMPLE_FPS khung/s nên mốc đầu/cuối của câu lệch tới 1/SAMPLE_FPS giây: làm mờ nới rộng hai đầu
+# (phụ đề ASS vẫn theo mốc gốc) và nối khoảng trống ngắn giữa hai câu cùng chỗ (câu quá ngắn OCR có thể sót).
+BLUR_PAD = 0.3
+BLUR_BRIDGE = 0.8
 FONT = "Arial"
 
 
@@ -46,6 +50,19 @@ def local_events(events: list[SubEvent], start: float, duration: float) -> list[
         if e.end <= start or e.start >= end:
             continue
         out.append((e, round(max(0.0, e.start - start), 3), round(min(duration, e.end - start), 3)))
+    return out
+
+
+def blur_items(events: list[SubEvent], start: float, duration: float,
+               pad: float = BLUR_PAD) -> list[tuple[SubEvent, float, float]]:
+    """Như local_events nhưng mỗi sự kiện được nới ±pad giây trước khi cắt theo đoạn — chỉ dùng để làm mờ."""
+    end = start + duration
+    out = []
+    for e in events:
+        s, t = e.start - pad, e.end + pad
+        if t <= start or s >= end:
+            continue
+        out.append((e, round(max(0.0, s - start), 3), round(min(duration, t - start), 3)))
     return out
 
 
@@ -85,7 +102,7 @@ def blur_groups(items: list[tuple[SubEvent, float, float]], src_w: int, src_h: i
 def _merge_windows(wins: list[tuple[float, float]]) -> list[tuple[float, float]]:
     merged: list[list[float]] = []
     for s, t in sorted(wins):
-        if merged and s <= merged[-1][1] + 0.05:
+        if merged and s <= merged[-1][1] + BLUR_BRIDGE:
             merged[-1][1] = max(merged[-1][1], t)
         else:
             merged.append([s, t])

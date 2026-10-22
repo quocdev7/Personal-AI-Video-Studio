@@ -17,7 +17,7 @@ uv run pytest                  # chạy test
 ```
 
 Tính năng tùy chọn: `uv sync --extra vietsub` (đọc chữ, RapidOCR), `uv sync --extra safety` (kiểm duyệt: NudeNet,
-onnxruntime, Pillow), `uv sync --extra remake` (Làm lại video: faster-whisper, piper-tts **GPL-3.0**, RapidOCR, Pillow).
+onnxruntime, Pillow), `uv sync --extra remake` (Làm lại video: faster-whisper, piper-tts **GPL-3.0**, vieneu Apache-2.0 — giọng có sẵn + nhân bản giọng, RapidOCR, Pillow).
 Cài nhiều nhóm: `uv sync --extra vietsub --extra safety --extra remake`. Dịch/viết lại cần Ollama + `qwen2.5:7b`;
 mô hình Whisper và giọng đọc tải trong ứng dụng (hiện dung lượng + giấy phép trước khi tải).
 

@@ -60,6 +60,8 @@ trước khi chạy. **Cần người dùng xác nhận trước khi cài Ollama
   **Đã làm trước (2026-10-20, "Làm lại video"):** piper-tts 1.8 — thư viện thực tế là **GPL-3.0-or-later** (không phải
   MIT như ghi ban đầu), người dùng đã chấp thuận; giọng vais1000 (CC BY 4.0) + vivos (CC BY-NC-SA, phi thương mại).
   Không đưa giọng 25hours_single vì không rõ giấy phép dữ liệu.
+  **2026-10-22:** thêm VieNeu-TTS v3 Turbo (Apache-2.0, ONNX CPU) — giọng có sẵn + nhân bản giọng từ file mẫu 3–8 s;
+  người dùng đã duyệt tải mô hình 636,9 MB. Có thể dùng lại cho lồng tiếng ở GĐ6.
 
 ### Làm lại video (Module H — làm trước theo yêu cầu 2026-10-20)
 Module `pas.modules.remake` + trang "Làm lại video": transcript (Whisper) → dịch theo ngữ cảnh + viết lại lời kể có hook

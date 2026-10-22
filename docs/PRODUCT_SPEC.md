@@ -82,7 +82,8 @@ video gốc chỉ được đọc. Mỗi bước là một tác vụ nền riên
    LLM cục bộ (Ollama qwen2.5:7b) tóm tắt chủ đề + nghĩa thuật ngữ → dịch qua tiếng Anh theo lô kèm ngữ cảnh → `bản dịch.srt`;
    viết lại thành lời kể (mở đầu gây tò mò lấy từ chi tiết hấp dẫn nhất, thân bài theo từng phần, lời kêu gọi cuối)
    → `kịch bản.txt`. Ba phong cách: kể chuyện / video ngắn / tài liệu.
-2. **Giọng đọc mới** (`remake.voice`): dán/sửa kịch bản → Piper TTS (giọng vais1000 hoặc vivos 65 người đọc),
+2. **Giọng đọc mới** (`remake.voice`): dán/sửa kịch bản → VieNeu-TTS v3 Turbo (mặc định; giọng có sẵn như "Adam bựa",
+   hoặc nhân bản giọng từ file mẫu 3–8 giây của người dùng) hoặc Piper TTS (giọng vais1000 hoặc vivos 65 người đọc),
    4 tông (tự nhiên / nhanh / chậm rãi / biểu cảm — chỉ chỉnh tốc độ, độ biểu cảm, khoảng nghỉ) →
    `giọng đọc.wav` + mốc thời gian từng câu `voice.json`.
 3. **Dựng lại video** (`remake.edit`): tìm chuyển cảnh → cắt mảnh 1,2–3 s khớp từng đoạn lời kể (hình đúng nội dung
@@ -94,7 +95,8 @@ video gốc chỉ được đọc. Mỗi bước là một tác vụ nền riên
 
 Giới hạn trung thực: đầu ra của LLM cần người xem lại; **từ khóa không có dữ liệu lượng tìm kiếm** (không gọi dịch vụ
 ngoài); làm lại **không** làm mất bản quyền của video gốc — người dùng phải có quyền sử dụng nguồn. Giọng vivos chỉ
-dùng phi thương mại (CC BY-NC-SA) và đọc sai một số dấu huyền/nặng; vais1000 yêu cầu ghi nguồn (CC BY 4.0).
+dùng phi thương mại (CC BY-NC-SA) và đọc sai một số dấu huyền/nặng; vais1000 yêu cầu ghi nguồn (CC BY 4.0). VieNeu (Apache-2.0) đọc chậm hơn Piper, tông chỉ đổi khoảng nghỉ; nhân bản
+giọng chỉ khi người dùng có quyền dùng giọng trong file mẫu (ứng dụng nhắc mỗi lần, không kiểm chứng được).
 Không tự đăng video lên nền tảng nào.
 
 ## 5. Yêu cầu phi chức năng

@@ -73,19 +73,28 @@
   - Cài một lần:
     1. `uv sync --extra remake` (faster-whisper MIT, Piper GPL-3.0, RapidOCR, Pillow).
     2. Ollama + `ollama pull qwen2.5:7b` như mục Việt hóa phụ đề (dịch và viết lại).
-    3. Trên trang: **Tải mô hình Whisper…** (1,6 GB, MIT) và **Tải giọng đọc…** (vais1000 63 MB hoặc vivos 28 MB) —
+    3. Trên trang: **Tải mô hình Whisper…** (1,6 GB, MIT) và **Tải giọng đọc…** (VieNeu v3 Turbo 636,9 MB Apache-2.0,
+       vais1000 63 MB hoặc vivos 28 MB) —
        ứng dụng hiện dung lượng, giấy phép, nguồn và chỉ tải khi bạn bấm *Yes*.
   - **1. Lấy SUB & viết lại nội dung** — chọn video, *Ngôn ngữ lời thoại* (tự nhận diện hoặc chọn), *Văn phong*
     (kể chuyện / video ngắn / tài liệu) → **Chạy bước 1**. Kết quả: `transcript gốc.srt`, `bản dịch.srt` (tiếng Việt,
     giữ mốc thời gian), `kịch bản.txt` (câu mở đầu gây tò mò lấy từ chi tiết hấp dẫn nhất, thân bài kể lại tự nhiên,
     lời kêu gọi cuối). Kịch bản được đưa sẵn vào ô của bước 2.
-  - **2. Tạo giọng đọc mới** — sửa hoặc dán kịch bản (mỗi đoạn cách nhau một dòng trống), chọn *Giọng*, *Người đọc*
-    (vivos có 65 người), *Tông giọng* → **Chạy bước 2**. Kết quả: `giọng đọc.wav` (dùng riêng được) + `voice.json`.
-    Tông giọng chỉ đổi tốc độ, độ lên xuống và khoảng nghỉ — không đổi giới tính hay cảm xúc của giọng.
+  - **2. Tạo giọng đọc mới** — sửa hoặc dán kịch bản (mỗi đoạn cách nhau một dòng trống), chọn *Giọng*:
+    - **VieNeu v3 Turbo** (mặc định, tự nhiên nhất): *Giọng VieNeu* = một giọng có sẵn (vd. "Adam bựa — Nam · Bắc"),
+      hoặc **Nhân bản từ file mẫu…** rồi chọn *File giọng mẫu* (âm thanh/video, 3–8 giây, một người nói rõ, không nhạc
+      nền; dài hơn chỉ lấy 8 giây đầu; file mẫu không bị sửa). **Chỉ nhân bản giọng bạn có quyền dùng** (giọng của
+      bạn, hoặc được người đó / dịch vụ tạo giọng cho phép). Chậm hơn Piper: kịch bản 5 phút ≈ 6 phút trên CPU.
+    - **Piper** (vais1000 / vivos): nhanh; *Người đọc* (vivos có 65 người).
+    Chọn *Tông giọng* → **Chạy bước 2**. Kết quả: `giọng đọc.wav` (dùng riêng được) + `voice.json`.
+    Tông giọng chỉ đổi tốc độ, độ lên xuống và khoảng nghỉ — không đổi giới tính hay cảm xúc của giọng (với VieNeu chỉ
+    đổi khoảng nghỉ).
   - **3. Dựng lại video theo giọng mới** — chọn *Khung hình* (9:16 / 1:1 / 16:9 / giữ nguyên), *Lấp khung*,
     *Zoom* (zoom nhẹ xen kẽ hoặc không), phụ đề lời đọc mới, làm mờ chữ cũ ở đáy hình, *Giữ tiếng gốc* (0–100%),
     *Tiêu đề trên video* → **Chạy bước 3**. Ứng dụng cắt cảnh thành mảnh 1,2–3 giây khớp với đoạn đang kể, đưa cảnh
-    của câu mở đầu lên trước → `video mới.mp4` dài đúng bằng giọng đọc.
+    của câu mở đầu lên trước → `video mới.mp4` dài đúng bằng giọng đọc. Chữ cũ được làm mờ sớm/muộn hơn mốc nhận
+    dạng một chút để không lộ ở chỗ chuyển cảnh; dự án làm trước bản sửa 2026-10-22 sẽ tự quét lại chữ cũ ở lần chạy
+    bước 3 kế tiếp (thêm vài phút).
   - **4. Thumbnail + SEO** — *Ghi chú* (tùy chọn: tệp người xem, kênh…) → **Chạy bước 4**. Kết quả: 3 ảnh
     `thumbnail 1.jpg`–`3.jpg` (1280×720) và `SEO.txt` (tiêu đề, mô tả, từ khóa, hashtag, tệp người xem, ghi nguồn).
   - *Ghi nguồn video gốc* (ô trong mục Dự án) được in chữ nhỏ suốt video mới và thêm vào `SEO.txt`.
@@ -95,6 +104,7 @@
     - **Từ khóa là đề xuất theo nội dung, không có số liệu lượt tìm kiếm thật** (ứng dụng không gọi dịch vụ ngoài).
     - Giọng vivos: **chỉ dùng phi thương mại** (giấy phép dữ liệu CC BY-NC-SA) và đọc sai một số dấu huyền/nặng.
       Giọng vais1000: phải ghi nguồn (CC BY 4.0) — `SEO.txt` đã có dòng ghi nguồn.
+      Giọng VieNeu: Apache-2.0, dùng thương mại được; nên ghi nguồn (có sẵn trong `SEO.txt`).
     - Ghép cảnh tự động theo nội dung lời thoại gốc, không "xem" hình — có thể chọn cảnh chưa đẹp.
     - Làm lại (dịch, đổi giọng, cắt ghép) **không** làm mất bản quyền của video gốc. Chỉ đăng khi bạn có quyền dùng
       nội dung nguồn.
@@ -110,7 +120,7 @@
 - File gốc chỉ được đọc. File kết quả không bao giờ ghi đè file có sẵn: nếu trùng tên, ứng dụng thêm ` (1)`, ` (2)`...
 - Đóng ứng dụng khi tác vụ đang chạy: tác vụ được dừng và đánh dấu **Bị gián đoạn**; mở lại và bấm *Chạy lại*.
 - Ứng dụng không tải lên, đăng hay chia sẻ video ở bất kỳ đâu. Chỉ kết nối Internet khi bạn chủ động tải mô hình
-  (mô hình bạo lực CLIP, Whisper, giọng đọc Piper; luôn hiện dung lượng và giấy phép trước, kiểm tra SHA-256 sau khi tải).
+  (mô hình bạo lực CLIP, Whisper, giọng đọc Piper/VieNeu; luôn hiện dung lượng và giấy phép trước, kiểm tra SHA-256 sau khi tải).
 - **Bản quyền:** chỉnh sửa (cắt, dịch, lồng tiếng) **không** làm mất quyền tác giả của nội dung gốc. Chỉ đăng nội dung
   bạn sở hữu hoặc được phép sử dụng.
 

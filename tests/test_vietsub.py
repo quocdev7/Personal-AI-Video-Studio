@@ -64,6 +64,12 @@ def test_group_drops_single_frame_flicker():
     assert group_events([(0, [_line("闪")]), (5, [_line("烁")])], fps=4) == []
 
 
+def test_group_min_frames_one_keeps_short_line():
+    # remake chỉ cần làm mờ: câu chỉ hiện trên 1 khung mẫu vẫn giữ
+    [e] = group_events([(22, [_line("哈喽大家好")])], fps=4, min_frames=1)
+    assert (e.start, e.end) == (5.5, 5.75)
+
+
 def test_group_merges_two_line_subtitle():
     frames = [(i, [_line("第一行字幕", y0=300), _line("第二行字幕", y0=335)]) for i in range(4)]
     [e] = group_events(frames, fps=4)
@@ -259,6 +265,23 @@ def test_local_events_clip_to_segment():
     items = vs_render.local_events(events, 10, 10)
     assert [(s, t) for _, s, t in items] == [(0.0, 2.0)]
     assert [(s, t) for _, s, t in vs_render.local_events(events, 0, 10)] == [(1.0, 3.0), (9.0, 10.0)]
+
+
+def test_blur_items_pad_both_ends_and_catch_neighbours():
+    # OCR 4 khung/s: chữ có thể hiện sớm/tắt muộn tới 0,25 s so với mốc → câu bắt đầu ngay sau đoạn vẫn được làm mờ
+    events = [_ev(10.0, 12.25), _ev(3.0, 4.0), _ev(20, 21)]
+    items = vs_render.blur_items(events, 8.0, 2.0)
+    assert [(s, t) for _, s, t in items] == [(1.7, 2.0)]
+    items = vs_render.blur_items(events, 4.1, 3.0)
+    assert [(s, t) for _, s, t in items] == [(0.0, 0.2)]
+    assert vs_render.local_events(events, 8.0, 2.0) == []  # phụ đề ASS vẫn theo mốc gốc
+
+
+def test_blur_windows_bridge_short_gaps():
+    # câu "哈喽大家好" 0,3 s giữa hai câu, OCR sót → khoảng trống ngắn cùng dòng vẫn được làm mờ liền
+    items = vs_render.blur_items([_ev(3.0, 5.0), _ev(6.0, 7.25), _ev(10.0, 11.0)], 0.0, 12.0)
+    [g] = vs_render.blur_groups(items, 640, 360)
+    assert g.windows == [(2.7, 7.55), (9.7, 11.3)]
 
 
 def test_blur_groups_merge_same_row_and_even_boxes():

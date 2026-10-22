@@ -4,6 +4,8 @@ URL cố định theo commit; kích thước + SHA-256 đã kiểm tra tay khi �
 - Whisper large-v3-turbo (bản CTranslate2, MIT) — nhận dạng giọng nói, đa ngôn ngữ.
 - Giọng Piper tiếng Việt: vais1000 (dữ liệu CC BY 4.0) và vivos (dữ liệu CC BY-NC-SA 4.0 → chỉ dùng phi thương mại).
   Không đưa giọng 25hours_single vào vì không rõ giấy phép dữ liệu.
+- VieNeu-TTS v3 Turbo (Apache-2.0, cả mô hình, codec MOSS và giọng có sẵn — README ghi rõ dùng thương mại được):
+  bản ONNX fp32 chạy CPU + bộ mã hóa người nói + khử ồn (để nhân bản giọng từ file mẫu).
 """
 
 from __future__ import annotations
@@ -79,7 +81,58 @@ VOICES: dict[str, Voice] = {v.key: v for v in (
            "65 người đọc (nam/nữ), 16 kHz — chỉ phi thương mại; ĐỌC SAI thanh huyền/nặng (mô hình thiếu ký hiệu thanh điệu)", 65, 16000),
 )}
 
-PACKS: dict[str, ModelPack] = {WHISPER.key: WHISPER, **{v.pack.key: v.pack for v in VOICES.values()}}
+VIENEU_REVISION = "61b85e3d937fbbacb387714180e8182823512523"
+CODEC_REVISION = "ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae"
+_VIENEU_BASE = f"https://huggingface.co/pnnbao-ump/VieNeu-TTS-v3-Turbo/resolve/{VIENEU_REVISION}/"
+_CODEC_BASE = f"https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/{CODEC_REVISION}/"
+VIENEU_DIR = "vieneu-v3-turbo"  # gốc: speaker_encoder.onnx, denoiser.onnx; onnx_update/: mô hình; codec/: MOSS
+_VIENEU_LICENSE = "Apache-2.0 (VieNeu-TTS v3 Turbo, codec MOSS-Audio-Tokenizer-Nano và các giọng có sẵn)"
+_VIENEU_FILES = [  # (đường dẫn trên nguồn, đường dẫn trong VIENEU_DIR, kích thước, SHA-256)
+    (_VIENEU_BASE + "onnx_update/vieneu_backbone_shared.data", "onnx_update/vieneu_backbone_shared.data",
+     415_319_040, "c7c072193db33d0542457e2612c7272c44c4279d1cafaf0aa4c379964911db2f"),
+    (_VIENEU_BASE + "onnx_update/vieneu_v3_heads.npz", "onnx_update/vieneu_v3_heads.npz",
+     52_219_622, "fb22484baa424bbb775133a6e5f0d00d6299b2b256fbe3312a864b85b9aed01e"),
+    (_VIENEU_BASE + "onnx_update/vieneu_acoustic_cached.onnx", "onnx_update/vieneu_acoustic_cached.onnx",
+     7_207_223, "f631e3387c788c3d8b9a5ac5df94952af5bc4c4d1049ff8a751e76a246fff2d4"),
+    (_VIENEU_BASE + "onnx_update/vieneu_prefill.onnx", "onnx_update/vieneu_prefill.onnx",
+     324_499, "27f8b064f6b57b5448e95d095f1959588c005d614678045c2b97ecccf3b7a0f7"),
+    (_VIENEU_BASE + "onnx_update/vieneu_decode_step.onnx", "onnx_update/vieneu_decode_step.onnx",
+     306_134, "bedc379cea61ea5d616312750d95ad3924e055856662d19187a889a5edc24ceb"),
+    (_VIENEU_BASE + "onnx_update/config.json", "onnx_update/config.json",
+     2_152, "17d89d414ee302a82db7b330bf57b4cdf8541569392119c81f552178cafcb79b"),
+    (_VIENEU_BASE + "onnx_update/tokenizer.json", "onnx_update/tokenizer.json",
+     22_320, "6cc6bcbe380b8c37bd9f2514e37c5dfa3e00e122c6e3125dae5c4afe48e39158"),
+    (_VIENEU_BASE + "speaker_encoder.onnx", "speaker_encoder.onnx",
+     28_303_423, "a6ac6a63997761ae2997373e2ee1c47040854b4b759ea41ec48e4e42df0f4d73"),
+    (_VIENEU_BASE + "denoiser.onnx", "denoiser.onnx",
+     42_661_414, "b7621953291cfe05e695a9c0ff4255aa2f93239fc17c26627e18b7b6b8f72f0b"),
+    (_CODEC_BASE + "moss_audio_tokenizer_decode_full.onnx", "codec/moss_audio_tokenizer_decode_full.onnx",
+     681_902, "0fbbafe3fd4afa2a019af5c5ced204af6e2d1db044fa40f021525d2aee95b4ac"),
+    (_CODEC_BASE + "moss_audio_tokenizer_decode_shared.data", "codec/moss_audio_tokenizer_decode_shared.data",
+     44_198_912, "e69d52e0f4e84ca27850557ee54face46632d3a5a16c89bd246c7c408466dcad"),
+    (_CODEC_BASE + "moss_audio_tokenizer_decode_step.onnx", "codec/moss_audio_tokenizer_decode_step.onnx",
+     351_400, "9527c86a29e1837edec1f74db57d5eeaadb3a715af3382703566460afed25855"),
+    (_CODEC_BASE + "codec_browser_onnx_meta.json", "codec/codec_browser_onnx_meta.json",
+     17_036, "3e291c883bb7d11ff2fe8e964e3e495519760358859f35c951254c7741592731"),
+    (_CODEC_BASE + "moss_audio_tokenizer_encode.onnx", "codec/moss_audio_tokenizer_encode.onnx",
+     815_775, "eadea4a645abdcf98714c7aead122ee2ce7da6e080f9f80b977cd1ca8e19473a"),
+    (_CODEC_BASE + "moss_audio_tokenizer_encode.data", "codec/moss_audio_tokenizer_encode.data",
+     44_507_136, "aa751265b2bab2887eac224484546b194875aa7494b607115439b3dc6b228a2c"),
+]
+VIENEU = ModelPack(
+    key="vieneu-v3-turbo",
+    title="VieNeu-TTS v3 Turbo (ONNX, CPU) — giọng đọc tiếng Việt 48 kHz + nhân bản giọng từ file mẫu",
+    files=tuple(ModelFile(f"{VIENEU_DIR}/{rel}", Path(rel).name, f"{VIENEU_DIR}/{rel}", url, sha, size,
+                          _VIENEU_LICENSE, "") for url, rel, size, sha in _VIENEU_FILES),
+    license=_VIENEU_LICENSE,
+    source=f"huggingface.co/pnnbao-ump/VieNeu-TTS-v3-Turbo commit {VIENEU_REVISION[:7]}; "
+           f"huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX commit {CODEC_REVISION[:7]}",
+    note="Giọng có sẵn được tác giả xác nhận dùng thương mại được. Nhân bản giọng từ file mẫu: bạn phải có quyền "
+         "dùng giọng trong file mẫu (không nhân bản giọng người thật khi chưa được phép, không giả mạo).",
+)
+
+PACKS: dict[str, ModelPack] = {WHISPER.key: WHISPER, VIENEU.key: VIENEU,
+                               **{v.pack.key: v.pack for v in VOICES.values()}}
 
 
 def whisper_dir(models_dir: Path) -> Path:
@@ -103,3 +156,13 @@ def require_voice(models_dir: Path, key: str) -> Path:
             "Ở trang 'Làm lại video' → bước 2, bấm 'Tải giọng đọc…' (cần mạng một lần).",
         )
     return Path(models_dir) / v.onnx
+
+
+def require_vieneu(models_dir: Path) -> Path:
+    """Thư mục gốc của VieNeu (đủ file đúng kích thước)."""
+    if not is_installed(models_dir, VIENEU):
+        raise DependencyMissing(
+            f"Chưa tải mô hình giọng đọc VieNeu-TTS v3 Turbo ({VIENEU.size / 1e6:.0f} MB, {VIENEU.license}).",
+            "Ở trang 'Làm lại video' → bước 2, chọn giọng VieNeu rồi bấm 'Tải giọng đọc…' (cần mạng một lần).",
+        )
+    return Path(models_dir) / VIENEU_DIR

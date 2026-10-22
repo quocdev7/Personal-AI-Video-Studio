@@ -15,8 +15,10 @@ asr = [
     "faster-whisper>=1.1,<2",
 ]
 # Giọng đọc tiếng Việt: Piper (GPL-3.0-or-later, kèm espeak-ng) — đã được người dùng chấp thuận; giọng tải riêng.
+# VieNeu-TTS v3 Turbo (Apache-2.0): giọng có sẵn + nhân bản giọng từ file mẫu, chạy ONNX trên CPU; mô hình tải riêng.
 tts = [
     "piper-tts==1.8.0",
+    "vieneu==3.8.3",
 ]
 vietsub = [
     "rapidocr-onnxruntime==1.4.4",
@@ -60,4 +62,10 @@ markers = [
 [tool.uv]
 # nudenet kéo theo opencv-python-headless, trùng thư mục cv2 với opencv-python của RapidOCR (cài cả hai làm hỏng
 # cv2). Ứng dụng không dùng cv2 cho NudeNet nên bỏ gói headless.
-override-dependencies = ["opencv-python-headless; sys_platform == 'never'"]
+# vieneu khai báo bắt buộc gradio (chỉ dùng cho giao diện web demo) và librosa (có đường dự phòng soundfile + soxr);
+# ứng dụng không dùng hai gói đó nên bỏ để khỏi kéo thêm hàng trăm MB.
+override-dependencies = [
+    "opencv-python-headless; sys_platform == 'never'",
+    "gradio; sys_platform == 'never'",
+    "librosa; sys_platform == 'never'",
+]

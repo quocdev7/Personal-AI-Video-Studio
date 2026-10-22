@@ -2,10 +2,10 @@
 
 Trạng thái: **Đã test** = có test tự động chạy qua · **Đã làm, chưa test** · **Chưa làm** · **Bị chặn** (cần quyết định/tài nguyên).
 
-Lần chạy test gần nhất: 2026-10-21, `uv run pytest` → **212 passed, 1 skipped**
+Lần chạy test gần nhất: 2026-10-22, `uv run pytest` → **222 passed, 1 skipped**
 (test gọi Ollama thật, chỉ chạy khi đặt `PAS_TEST_OLLAMA=1` — đã chạy riêng ngày 2026-10-19: passed),
 Windows 11, Python 3.12.13, FFmpeg 9.0.2 (bản build Gyan), RapidOCR 1.4.4, Ollama 0.40.5 + qwen2.5:7b,
-NudeNet 3.4.2, onnxruntime (CPU), faster-whisper + large-v3-turbo, piper-tts 1.8 (giọng vais1000, vivos).
+NudeNet 3.4.2, onnxruntime (CPU), faster-whisper + large-v3-turbo, piper-tts 1.8 (giọng vais1000, vivos), vieneu 3.8.3 + VieNeu-TTS v3 Turbo (ONNX).
 
 ## Giai đoạn 1 — Khảo sát & tài liệu
 | Việc | Trạng thái |
@@ -102,8 +102,10 @@ Thử trên video thật `docs/1276877940-1-192.mp4` (4 phút 52 giây, 1280×72
 | 1. Viết lại lời kể + hook + lời kêu gọi → `kịch bản.txt` | Đã test + video thật: 21 phần, 3676 ký tự (bản dịch 3700) — **không ngắn hơn**; ~6 phút + hook 41 s. Hook: "Xem cách một viên sapphire hồng xanh thay đổi ngoạn mục sau khi được cắt lại!" |
 | 2. Giọng đọc mới (Piper, chọn giọng + tông) → `giọng đọc.wav` | Đã test + video thật: vais1000, tông tự nhiên, 192,3 s, 21/21 phần khớp kịch bản, 8 s. **Chưa nghe bằng tai** |
 | 3. Dựng lại video (cắt mảnh ngắn, đổi thứ tự, zoom/crop 9:16, che phụ đề cũ, chữ Việt, khớp giọng) → `video mới.mp4` | Đã test (FFmpeg thật trên video tổng hợp) + video thật: 192,3 s = giọng, 1080×1920 H.264/AAC, 68 MB, 75 mảnh từ 66 shot, 152 câu chữ, 94 vùng làm mờ, 157 s. Xem 12 khung hình bằng mắt: đúng |
+| 3. Sửa lỗi 2026-10-22: chữ Trung cũ còn lộ vài khung ở chỗ chuyển cảnh (`docs/video_mới.mp4`). Nguyên nhân: OCR lấy mẫu 4 khung/s nên mốc đầu/cuối câu lệch tới 0,25 s, câu < 0,5 s bị bỏ (cần ≥ 2 khung mẫu). Sửa: làm mờ nới ±0,3 s (`blur_items`), nối khoảng trống ≤ 0,8 s cùng dòng, bước 3 giữ cả câu 1 khung mẫu (`min_frames=1`), dự án cũ tự quét lại (`ocr_version`) | Đã test (4 test mới) + video thật: so 2173 dòng chữ Trung OCR 10 khung/s của video gốc với vùng làm mờ — cũ lộ ~62, mới **0**; dựng thật 7 mảnh ở các chỗ từng lộ (8,0 s, 49,5 s…) rồi OCR từng khung đầu ra: 0 khung còn chữ. Quét lại tốn ~2,5 phút cho video 4:52 |
 | 4. Thumbnail + tiêu đề + từ khóa → `thumbnail 1–3.jpg`, `SEO.txt` | Đã test + video thật: 3 thumbnail 1280×720 (xem bằng mắt), 123 s. Từ khóa do mô hình đề xuất, **không có số liệu tìm kiếm thật** |
-| Tải mô hình Whisper / giọng đọc (hiện dung lượng + giấy phép, hỏi trước) | Đã test (máy chủ cục bộ); đã tải thật large-v3-turbo, vais1000, vivos |
+| 2. Giọng VieNeu-TTS v3 Turbo (Apache-2.0): giọng có sẵn (mặc định "Adam bựa") hoặc nhân bản từ file mẫu 3–8 giây | Đã test (`test_vieneu.py`, 9 test, engine giả + 1 test mô hình thật) + chạy thật qua tác vụ `remake.voice`: kịch bản 2 đoạn — Adam bựa 11,6 s âm thanh / 12 s xử lý; nhân bản từ `docs/aivoices-1792641262099.mp3` (dùng 3,6 s) 11,0 s / 16 s. Whisper nghe lại đúng nguyên văn cả hai; file mẫu không đổi (SHA-256). RTF ≈ 1–1,4 trên CPU. **Người dùng chưa nghe so sánh** |
+| Tải mô hình Whisper / giọng đọc (hiện dung lượng + giấy phép, hỏi trước) | Đã test (máy chủ cục bộ); đã tải thật large-v3-turbo, vais1000, vivos, VieNeu v3 Turbo (636,9 MB) |
 | Trang UI (4 bước, mở dự án cũ, khóa bước chưa đủ điều kiện) | Đã test (offscreen); mở ứng dụng thật trên desktop, trang hiển thị đúng (chụp màn hình). **Chưa bấm chạy 4 bước từ UI bằng tay** |
 | Chạy lại sau gián đoạn (dùng lại transcript, bản dịch từng lô) | Đã làm + dùng thật khi chạy lại bước 1; **chưa có test gián đoạn riêng** |
 | Video dài (> 10 phút) | **Chưa test** |
@@ -119,6 +121,9 @@ Chưa làm. Xem [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 - Chưa có máy Windows 10 để kiểm thử.
 - Làm lại video: video mới **vẫn là nội dung của người khác** — không xóa bản quyền; logo/watermark gốc
   (阿豆彩宝切割工作室, bilibili) vẫn còn trên hình (cố ý không xóa). Giọng vais1000 cần ghi nguồn CC BY 4.0.
+- Nhân bản giọng VieNeu: người dùng phải có quyền dùng giọng trong file mẫu (file `aivoices-…` có vẻ lấy từ dịch vụ
+  giọng AI — cần xem điều khoản của dịch vụ đó). VieNeu đọc chậm hơn Piper (~1,2× thời lượng trên CPU), tông giọng
+  chỉ đổi khoảng nghỉ. Cài vieneu hạ Pillow 13.0 → 12.3 (ràng buộc của vieneu); gradio/librosa bị bỏ qua override.
 - Làm lại video: chất lượng lời Việt còn lỗi (xem mục sửa lỗi bên dưới) — bắt buộc đọc và sửa `kịch bản.txt` trước bước 2.
 - Việt hóa phụ đề (vietsub) vẫn dịch thẳng Trung → Việt — có thể gặp lỗi lẫn chữ Hán/đổi tên vật như đã thấy ở Làm lại video.
 - Chưa kiểm thử ổ đĩa đầy thật (mới giả lập).

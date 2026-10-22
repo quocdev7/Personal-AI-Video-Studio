@@ -92,7 +92,9 @@ Quy tắc phụ thuộc: `ui → services → jobs/projects → modules → medi
 ### modules/vietsub (Việt hóa phụ đề in trên hình, dùng trong tác vụ "Tạo clip ngắn")
 - `ocr.py` — FFmpeg xuất khung `rawvideo` qua pipe (4 khung/giây, thu nhỏ) → RapidOCR (dò + nhận dạng chữ; chỉ chạy lại
   nhận dạng khi vùng chữ thay đổi) → `group_events` gom thành câu `SubEvent(start, end, box, text)`; chữ đứng yên > 20 s
-  đánh dấu `static` (logo/watermark).
+  đánh dấu `static` (logo/watermark). Mốc thời gian lệch tới 1/4 s do lấy mẫu → `render.blur_items` nới cửa sổ làm
+  mờ ±0,3 s và `blur_groups` nối khoảng trống ≤ 0,8 s cùng dòng (phụ đề ASS vẫn theo mốc gốc). "Làm lại video" quét với
+  `min_frames=1` (chỉ để làm mờ) và lưu `ocr_events` + `ocr_version` vào dự án; đổi phiên bản thì tự quét lại.
 - `translate.py` — `OllamaClient` gọi `http://127.0.0.1:11434` (`/api/tags`, `/api/chat` với JSON schema làm `format`,
   giới hạn `num_predict`), dịch theo lô, kiểm tra kết quả (id hợp lệ, không còn chữ Hán), dịch lại câu lỗi; lưu từng lô
   vào trạng thái tác vụ để chạy tiếp.
@@ -142,6 +144,12 @@ Quy tắc phụ thuộc: `ui → services → jobs/projects → modules → medi
 - `tts.py` — Piper 1.8 (`PiperVoice`, onnxruntime CPU) đọc từng câu; tông = `length_scale` / `noise_scale` /
   `noise_w_scale` + khoảng nghỉ; câu chứa âm vị giọng không có bị báo trước. `voice.json` ghi mốc từng câu và gắn đoạn
   giọng với phần kịch bản (so khớp văn bản đã chuẩn hóa) — người dùng sửa kịch bản thì phần không khớp dựng theo vị trí.
+  `render(speak, rate, …)` là phần chung (tách câu, khoảng nghỉ, mốc thời gian, ghi qua `.part`) cho mọi engine.
+- `vieneu_tts.py` — VieNeu-TTS v3 Turbo (vieneu 3.8.3, ONNX CPU, 48 kHz): giọng có sẵn (đọc danh sách từ
+  `voices_v3_turbo.json` của thư viện, không import) hoặc nhân bản: ffmpeg chuyển file mẫu (âm thanh/video bất kỳ,
+  ≥ 3 s) thành WAV mono 48 kHz ≤ 8 s trong thư mục tác vụ → `encode_reference` một lần → `infer` từng câu. `load`
+  nạp từ thư mục models của ứng dụng: đưa `codec_dir` vào `OnnxV3LiteEngine` và chặn `hf_hub_download` trong lúc
+  khởi tạo (thiếu file → báo lỗi, không tự tải). Tông giọng chỉ đổi khoảng nghỉ (mô hình không có tham số tốc độ).
 - `edit.py` — chuyển cảnh: FFmpeg xuất khung 64×36 xám 4 hình/giây, chênh lệch trung bình vượt ngưỡng = cắt → shot.
   Mỗi đoạn giọng → khoảng thời gian nguồn (từ `src` của phần kịch bản) → mảnh 1,2–3 s trong shot, tránh dùng lại, nới
   rộng nếu thiếu; tổng = thời lượng đoạn giọng. Mỗi mảnh mã hóa riêng (crop/nền mờ, zoom, làm mờ phụ đề cũ theo
@@ -191,6 +199,10 @@ Thời gian lưu ISO-8601 UTC. Xóa dự án chỉ xóa bản ghi, **không** đ
 - Làm lại video: tải mô hình chỉ khi người dùng bấm và xác nhận (hiện dung lượng + giấy phép): Whisper large-v3-turbo
   bản CTranslate2 (1,6 GB, MIT — huggingface.co/dropbox-dash), giọng Piper (huggingface.co/rhasspy/piper-voices, URL cố
   định theo commit, SHA-256): vais1000 (63 MB; mô hình MIT, dữ liệu CC BY 4.0 → ghi nguồn), vivos (28 MB; dữ liệu
-  CC BY-NC-SA 4.0 → **chỉ phi thương mại**). Thư viện: faster-whisper (MIT), CTranslate2 (MIT), piper-tts 1.8
+  CC BY-NC-SA 4.0 → **chỉ phi thương mại**); VieNeu-TTS v3 Turbo (636,9 MB, huggingface.co/pnnbao-ump/VieNeu-TTS-v3-Turbo,
+  Apache-2.0 cho mô hình, codec MOSS-Audio-Tokenizer-Nano và giọng có sẵn — ghi nguồn pnnbao97/VieNeu-TTS). Thư viện: faster-whisper (MIT), CTranslate2 (MIT), piper-tts 1.8
   (**GPL-3.0-or-later**, kèm espeak-ng GPL — người dùng đã chấp thuận; ứng dụng dùng cá nhân, không phân phối),
-  Pillow (MIT-CMU). Ghi nguồn video gốc + giọng đọc được thêm tự động vào `SEO.txt`.
+  vieneu 3.8.3 (Apache-2.0) kéo theo sea-g2p (Apache-2.0), kaldi-native-fbank (Apache-2.0), soundfile (BSD-3),
+  soxr (**LGPL-2.1+**, chỉ liên kết động), cffi/pycparser (MIT/BSD); gradio và librosa bị loại bằng
+  `override-dependencies` (chỉ dùng cho demo web / có đường dự phòng soundfile + soxr); Pillow bị giới hạn < 13
+  (đang 12.3.0). Pillow (MIT-CMU). Ghi nguồn video gốc + giọng đọc được thêm tự động vào `SEO.txt`.

@@ -1,7 +1,8 @@
-"""Giọng đọc mới bằng Piper (GPL-3.0, chạy cục bộ CPU) — đọc từng câu, ghi mốc thời gian từng câu/đoạn.
+"""Giọng đọc mới — đọc từng câu, ghi mốc thời gian từng câu/đoạn. Piper (GPL-3.0) ở đây; VieNeu ở `vieneu_tts`.
 
 Mốc thời gian (voice.json) dùng để bước dựng video đặt phụ đề đúng câu và chọn cảnh khớp lời.
 "Tông giọng" chỉ chỉnh tốc độ, độ biểu cảm và khoảng nghỉ — Piper không đổi được cảm xúc/giới tính của một giọng.
+Với VieNeu, tông giọng chỉ đổi khoảng nghỉ (mô hình không có tham số tốc độ; ngữ điệu nằm sẵn trong giọng mẫu).
 """
 
 from __future__ import annotations
@@ -106,18 +107,40 @@ def missing_phonemes(voice, text: str) -> set[str]:
 
 def synthesize(voice, text: str, tone: Tone, speaker: int | None, out: Path, ctx: "JobContext | None" = None,
                on_progress: Callable[[float], None] | None = None) -> dict:
-    """Ghi WAV mono 16-bit tại `out` (qua file .part). Trả về {'sample_rate','duration','segments':[...]}."""
+    """Đọc bằng Piper. Ghi WAV mono 16-bit tại `out`. Trả về {'sample_rate','duration','segments':[...]}."""
     from piper import SynthesisConfig
 
-    paras = [(p, sentences(p)) for p in paragraphs(text)]
-    missing = missing_phonemes(voice, "\n".join(p for p, _ in paras))
+    missing = missing_phonemes(voice, "\n".join(paragraphs(text)))
     if missing:
         log.warning("Giọng này không có %d âm vị/thanh điệu (%s) nên sẽ đọc sai một số từ — nên dùng giọng vais1000.",
                     len(missing), " ".join(sorted(missing)))
-    total = sum(len(s) for _, s in paras) or 1
     cfg = SynthesisConfig(speaker_id=speaker, length_scale=tone.length_scale, noise_scale=tone.noise_scale,
                           noise_w_scale=tone.noise_w_scale, normalize_audio=True, volume=1.0)
     rate = int(voice.config.sample_rate)
+
+    def speak(sentence: str) -> bytes:
+        try:
+            chunks = list(voice.synthesize(sentence, cfg))
+        except Exception as exc:
+            raise ExternalToolError(f"Piper lỗi khi đọc câu {sentence[:60]!r}: {exc}",
+                                    "Sửa câu đó (bỏ ký tự lạ) rồi chạy lại.") from exc
+        for ch in chunks:
+            if ch.sample_rate != rate or ch.sample_channels != 1 or ch.sample_width != 2:
+                raise ExternalToolError(f"Piper trả âm thanh định dạng lạ ({ch.sample_rate} Hz, {ch.sample_channels} kênh).",
+                                        "File giọng không đúng phiên bản. Tải lại giọng đọc.")
+        return b"".join(ch.audio_int16_bytes for ch in chunks)
+
+    return render(speak, rate, text, tone, out, ctx, on_progress)
+
+
+def render(speak: Callable[[str], bytes], rate: int, text: str, tone: Tone, out: Path,
+           ctx: "JobContext | None" = None, on_progress: Callable[[float], None] | None = None) -> dict:
+    """Đọc từng câu bằng `speak` (câu → PCM 16-bit mono tại `rate`), chèn khoảng nghỉ, ghi mốc thời gian từng câu/đoạn.
+
+    Ghi qua file .part rồi mới đổi tên, nên lỗi giữa chừng không để lại WAV dở.
+    """
+    paras = [(p, sentences(p)) for p in paragraphs(text)]
+    total = sum(len(s) for _, s in paras) or 1
     part = out.with_name(out.name + ".part")
     segments: list[dict] = []
     frames = 0
@@ -145,21 +168,11 @@ def synthesize(voice, text: str, tone: Tone, speaker: int | None, out: Path, ctx
                         w.writeframes(gap)
                         frames += len(gap) // 2
                     start = frames / rate
-                    try:
-                        chunks = list(voice.synthesize(stext, cfg))
-                    except Exception as exc:
-                        raise ExternalToolError(f"Piper lỗi khi đọc câu {stext[:60]!r}: {exc}",
-                                                "Sửa câu đó (bỏ ký tự lạ) rồi chạy lại.") from exc
-                    for ch in chunks:
-                        if ch.sample_rate != rate or ch.sample_channels != 1 or ch.sample_width != 2:
-                            raise ExternalToolError(
-                                f"Piper trả âm thanh định dạng lạ ({ch.sample_rate} Hz, {ch.sample_channels} kênh).",
-                                "File giọng không đúng phiên bản. Tải lại giọng đọc.")
-                        data = ch.audio_int16_bytes
-                        w.writeframes(data)
-                        frames += len(data) // 2
+                    data = speak(stext)
+                    w.writeframes(data)
+                    frames += len(data) // 2
                     if frames / rate - start < 0.05:
-                        log.warning("Piper không đọc ra tiếng cho câu: %r", stext)
+                        log.warning("Giọng đọc không đọc ra tiếng cho câu: %r", stext)
                     seg["sentences"].append({"text": stext, "start": round(start, 3), "end": round(frames / rate, 3)})
                     done += 1
                     if on_progress:

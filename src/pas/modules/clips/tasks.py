@@ -451,7 +451,8 @@ def make_handler(tools_provider: Callable[[], FFmpegTools], settings_provider: C
                     groups, ass_name = [], None
                     if vietsub:
                         items = vs_render.local_events(events, seg.start, seg.duration)
-                        groups = vs_render.blur_groups(items, v.width, v.height)
+                        groups = vs_render.blur_groups(vs_render.blur_items(events, seg.start, seg.duration),
+                                                       v.width, v.height)
                         if any(e.vi and not e.static for e, _, _ in items):
                             ass_name = f"seg{seg.index:04d}.ass"
                             (ctx.temp_dir / ass_name).write_text(vs_render.build_ass(items, fit_map), encoding="utf-8")

@@ -139,7 +139,8 @@ class _Track:
     boxes: list[Box] = field(default_factory=list)
 
 
-def group_events(frames: list[tuple[int, list[Line]]], fps: float = SAMPLE_FPS) -> list[SubEvent]:
+def group_events(frames: list[tuple[int, list[Line]]], fps: float = SAMPLE_FPS,
+                 min_frames: int = MIN_FRAMES) -> list[SubEvent]:
     """frames: (chỉ số khung, các dòng chữ Trung trên khung đó), theo thứ tự thời gian.
 
     Mỗi dòng nối vào "track" đang mở nếu cùng chỗ (chồng dọc) và chữ giống nhau ≥ SIMILARITY; track không được
@@ -175,7 +176,7 @@ def group_events(frames: list[tuple[int, list[Line]]], fps: float = SAMPLE_FPS) 
                 used.add(best)
     closed.extend(open_tracks)
 
-    tracks = [t for t in closed if len(t.readings) >= MIN_FRAMES]
+    tracks = [t for t in closed if len(t.readings) >= min_frames]
     tracks.sort(key=lambda t: (t.first, _box_of(t)[1]))
     events: list[SubEvent] = []
     merged = [False] * len(tracks)
@@ -345,8 +346,11 @@ def scan_video(
     ctx: "JobContext | None" = None,
     on_progress: Callable[[float], None] | None = None,
     engine=None,
+    min_frames: int = MIN_FRAMES,
 ) -> list[SubEvent]:
-    """Đọc toàn bộ video, trả về các sự kiện phụ đề tiếng Trung (tọa độ video gốc)."""
+    """Đọc toàn bộ video, trả về các sự kiện phụ đề tiếng Trung (tọa độ video gốc).
+
+    min_frames=1 giữ cả câu chỉ hiện trên 1 khung mẫu (< 0,5 s) — dùng khi chỉ cần làm mờ, chấp nhận thêm nhận nhầm."""
     engine = engine or load_engine()
     geo = sample_geometry(width, height, region)
     ocr = FrameOCR(engine, geo)
@@ -362,6 +366,6 @@ def scan_video(
         idx += 1
         if on_progress and idx % 4 == 0:
             on_progress(min(1.0, idx / total_frames))
-    events = group_events(frames, SAMPLE_FPS)
+    events = group_events(frames, SAMPLE_FPS, min_frames)
     log.info("OCR %d khung, %d lần nhận dạng, %d sự kiện", idx, ocr.rec_calls, len(events))
     return events

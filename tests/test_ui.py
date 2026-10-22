@@ -261,9 +261,34 @@ def test_remake_download_asks_first(window, monkeypatch):
     page.btn_whisper.click()
     assert submitted == []
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    page.voice.setCurrentIndex(page.voice.findData("vais1000"))
     page.btn_voice_dl.click()
     assert submitted == [("model.download", {"model": "piper-vi_VN-vais1000-medium"})]
     assert page.downloads == {9: "piper-vi_VN-vais1000-medium"} and not page.btn_voice_dl.isEnabled()
+
+
+def test_remake_vieneu_controls(window, tmp_path):
+    from pas.modules.remake import vieneu_tts
+
+    page = window.remake
+    if not vieneu_tts.available():
+        pytest.skip("Chưa cài vieneu")
+    assert page.voice.currentData() == "vieneu" and page.preset.currentData() == "Adam bựa"
+    page._sync()
+    assert page.f2.isRowVisible(page.preset) and not page.f2.isRowVisible(page.sample)
+    assert not page.f2.isRowVisible(page.speaker)
+    page.preset.setCurrentIndex(page.preset.count() - 1)  # "Nhân bản từ file mẫu…"
+    assert page.f2.isRowVisible(page.sample) and page.f2.isRowVisible(page.clone_hint)
+    page.project_dir = str(tmp_path)
+    page._sync()
+    assert not page.btn_voice.isEnabled()  # chưa chọn file mẫu
+    sample = tmp_path / "mẫu.wav"
+    sample.write_bytes(b"x")
+    page.sample.set_path(str(sample))
+    assert page.btn_voice.isEnabled()
+    page.voice.setCurrentIndex(page.voice.findData("vais1000"))
+    assert not page.f2.isRowVisible(page.preset) and page.f2.isRowVisible(page.speaker)
+    page.project_dir = None
 
 
 def test_remake_render_results():

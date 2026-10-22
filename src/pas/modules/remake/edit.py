@@ -223,7 +223,7 @@ def plan(segments: list[dict], script_parts: list[dict], lines: list[dict], shot
 def piece_filter(piece: Piece, events: list[SubEvent], src_w: int, src_h: int, aspect: str, fit: str) -> str:
     chain = []
     label = "[0:v:0]"
-    items = vs_render.local_events([e for e in events if not e.static], piece.src_start, piece.duration)
+    items = vs_render.blur_items([e for e in events if not e.static], piece.src_start, piece.duration)
     groups = vs_render.blur_groups(items, src_w, src_h) if items else []
     if groups:
         chain.append(vs_render.blur_graph(groups, label, "[vb]"))

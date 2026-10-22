@@ -1,7 +1,7 @@
 """4 tác vụ của "Làm lại video" — mỗi bước đọc/ghi chung thư mục dự án; chạy lại thì dùng lại kết quả đã có.
 
 - remake.script: video → transcript gốc (Whisper) → bản dịch theo ngữ cảnh → kịch bản lời kể mới (hook/thân/kết).
-- remake.voice:  kịch bản (người dùng có thể sửa) → giọng đọc WAV + mốc thời gian từng câu (Piper).
+- remake.voice:  kịch bản (người dùng có thể sửa) → giọng đọc WAV + mốc thời gian từng câu (Piper hoặc VieNeu).
 - remake.edit:   video gốc + giọng đọc → video mới (cắt ngắn, đổi thứ tự, zoom/crop, chữ, khớp giọng).
 - remake.seo:    kịch bản → tiêu đề/mô tả/từ khóa/hashtag + 3 thumbnail.
 Video gốc chỉ được đọc. Mọi file ghi ra nằm trong thư mục "<tên video> - làm lại".
@@ -25,7 +25,7 @@ from pas.jobs.context import JobContext
 from pas.jobs.registry import TaskRegistry, TaskSpec
 from pas.media.ffmpeg import FFmpegTools, MediaInfo, probe, run_ffmpeg
 from pas.modules.clips.tasks import ASPECTS, FITS, VIDEO_EXTENSIONS
-from pas.modules.remake import asr, edit, models, project, script, seo, tts
+from pas.modules.remake import asr, edit, models, project, script, seo, tts, vieneu_tts
 from pas.modules.vietsub import ocr as vs_ocr
 from pas.modules.vietsub import render as vs_render
 from pas.modules.vietsub.translate import OllamaClient
@@ -39,6 +39,7 @@ KIND_SEO = "remake.seo"
 DURATION_TOLERANCE = 0.5
 MAX_TITLE = 80
 MAX_CREDIT = 120
+OCR_VERSION = 2  # đổi khi cách quét chữ cũ thay đổi → dự án cũ tự quét lại ở lần dựng sau
 
 
 def _load_json(path: Path) -> dict:
@@ -240,10 +241,13 @@ def validate_voice(params: dict) -> None:
     project.validate_project_dir(params)
     tts.validate_text(params.get("text"))
     key = params.get("voice")
-    if key not in models.VOICES:
-        raise InvalidInput(f"Giọng đọc không hợp lệ: {key!r}")
     if params.get("tone", "natural") not in tts.TONES:
         raise InvalidInput(f"Tông giọng không hợp lệ: {params.get('tone')!r}")
+    if key == vieneu_tts.KEY:
+        vieneu_tts.validate_choice(params.get("preset"), params.get("sample"))
+        return
+    if key not in models.VOICES:
+        raise InvalidInput(f"Giọng đọc không hợp lệ: {key!r}")
     sp = params.get("speaker", 0)
     if not isinstance(sp, int) or isinstance(sp, bool) or not 0 <= sp < models.VOICES[key].speakers:
         raise InvalidInput(f"Người đọc phải từ 0 đến {models.VOICES[key].speakers - 1}.")
@@ -254,36 +258,72 @@ def voice_credit(key: str) -> str:
     return f"Giọng đọc: Piper {v.pack.key.removeprefix('piper-')} ({v.pack.license})"
 
 
-def make_voice_handler(models_dir: Path):
+def _speak_vieneu(ctx: JobContext, p: dict, models_dir: Path, tools: FFmpegTools, tone: tts.Tone,
+                  out: Path) -> tuple[dict, dict]:
+    root = models.require_vieneu(models_dir)
+    preset = None if p.get("sample") else p["preset"]
+    sample = None
+    if p.get("sample"):
+        src = Path(p["sample"])
+        ctx.report(0.01, "Đang đọc file giọng mẫu")
+        sample = ctx.temp_dir / "voice_sample.wav"
+        used = vieneu_tts.prepare_sample(src, tools, sample, ctx)
+        ctx.log(f"Giọng mẫu: {src.name} (dùng {used:.1f} giây đầu). {vieneu_tts.CLONE_NOTE}")
+    ctx.report(0.03, "Đang nạp mô hình VieNeu")
+    engine = vieneu_tts.load(root)
+    ctx.report(0.08, f"Đang đọc kịch bản ({'giọng nhân bản' if sample else preset}, {tone.label})")
+    res = vieneu_tts.synthesize(engine, p["text"], tone, out, ctx, ctx.sub_progress(0.08, 0.97),
+                                preset=preset, sample=sample)
+    info = {"voice": vieneu_tts.KEY, "speaker": None, "preset": preset,
+            "sample": Path(p["sample"]).name if sample else None,
+            "license": models.VIENEU.license, "note": models.VIENEU.note,
+            "credit": vieneu_tts.credit(preset, sample)}
+    return info, res
+
+
+def _speak_piper(ctx: JobContext, p: dict, models_dir: Path, tone: tts.Tone, out: Path) -> tuple[dict, dict]:
+    key = p["voice"]
+    voice_info = models.VOICES[key]
+    onnx = models.require_voice(models_dir, key)
+    ctx.report(0.02, f"Đang nạp giọng {key}")
+    voice = tts.load_voice(onnx)
+    speaker = p.get("speaker", 0) if voice_info.speakers > 1 else None
+    ctx.report(0.05, f"Đang đọc kịch bản ({tone.label})")
+    res = tts.synthesize(voice, p["text"], tone, speaker, out, ctx, ctx.sub_progress(0.05, 0.97))
+    info = {"voice": key, "speaker": speaker, "preset": None, "sample": None,
+            "license": voice_info.pack.license, "note": voice_info.pack.note, "credit": voice_credit(key)}
+    return info, res
+
+
+def make_voice_handler(models_dir: Path, tools_provider: Callable[[], FFmpegTools]):
     def run(ctx: JobContext) -> dict:
         p = ctx.params
         proj = project.validate_project_dir(p)
         data = project.load(proj)
-        key, tone_key = p["voice"], p.get("tone", "natural")
-        voice_info = models.VOICES[key]
-        onnx = models.require_voice(models_dir, key)
-        ctx.report(0.02, f"Đang nạp giọng {key}")
-        voice = tts.load_voice(onnx)
+        tone_key = p.get("tone", "natural")
         tone = tts.TONES[tone_key]
-        speaker = p.get("speaker", 0) if voice_info.speakers > 1 else None
         ensure_free_space(proj, 200 * 1024 * 1024)
-        ctx.report(0.05, f"Đang đọc kịch bản ({tone.label})")
         out = proj / project.VOICE_WAV
-        res = tts.synthesize(voice, p["text"], tone, speaker, out, ctx, ctx.sub_progress(0.05, 0.97))
+        if p["voice"] == vieneu_tts.KEY:
+            info, res = _speak_vieneu(ctx, p, models_dir, tools_provider(), tone, out)
+        else:
+            info, res = _speak_piper(ctx, p, models_dir, tone, out)
         tts.match_script(res["segments"], data.get("script") or [])
         matched = sum(s["script_id"] is not None for s in res["segments"])
-        meta = {"voice": key, "speaker": speaker, "tone": tone_key, "license": voice_info.pack.license,
-                "credit": voice_credit(key), **res}
+        meta = {"voice": info["voice"], "speaker": info["speaker"], "preset": info["preset"], "sample": info["sample"],
+                "tone": tone_key, "license": info["license"], "credit": info["credit"], **res}
         vs_render.write_text_atomic(proj / project.VOICE_JSON, json.dumps(meta, ensure_ascii=False, indent=1))
-        data["voice"] = {k: meta[k] for k in ("voice", "speaker", "tone", "license", "credit", "duration")}
+        data["voice"] = {k: meta[k] for k in ("voice", "speaker", "preset", "sample", "tone", "license", "credit",
+                                              "duration")}
         project.save(proj, data)
         ctx.log(f"Giọng đọc {res['duration']:.1f}s, {len(res['segments'])} đoạn "
                 f"({matched} đoạn khớp kịch bản bước 1 → chọn đúng cảnh)")
-        ctx.log(f"Giấy phép: {voice_info.pack.license}. {voice_info.pack.note}")
+        ctx.log(f"Giấy phép: {info['license']}. {info['note']}")
         ctx.report(1.0, "Đã xuất giọng đọc")
         return {"project_dir": str(proj), "wav": str(out), "duration": res["duration"],
-                "segments": len(res["segments"]), "matched": matched, "voice": key, "tone": tone_key,
-                "speaker": speaker, "license": voice_info.pack.license, "note": voice_info.pack.note}
+                "segments": len(res["segments"]), "matched": matched, "voice": info["voice"], "tone": tone_key,
+                "speaker": info["speaker"], "preset": info["preset"], "sample": info["sample"],
+                "license": info["license"], "note": info["note"]}
 
     return run
 
@@ -369,11 +409,12 @@ def make_edit_handler(tools_provider: Callable[[], FFmpegTools], settings_provid
         shots = [tuple(s) for s in data["shots"]]
         events: list[vs_ocr.SubEvent] = []
         if blur_subs:
-            if "ocr_events" not in data:
+            if "ocr_events" not in data or data.get("ocr_version") != OCR_VERSION:
                 ctx.report(0.1, "Đang tìm phụ đề tiếng Trung cũ trên hình (để làm mờ)")
                 found = vs_ocr.scan_video(src, tools, v.width, v.height, info.duration, "bottom", ctx,
-                                          ctx.sub_progress(0.1, 0.3))
+                                          ctx.sub_progress(0.1, 0.3), min_frames=1)
                 data["ocr_events"] = [e.to_dict() for e in found]
+                data["ocr_version"] = OCR_VERSION
                 project.save(proj, data)
             events = [vs_ocr.SubEvent.from_dict(d) for d in data["ocr_events"]]
             static = sum(e.static for e in events)
@@ -389,7 +430,8 @@ def make_edit_handler(tools_provider: Callable[[], FFmpegTools], settings_provid
 
         # --- mã hóa từng cảnh (tiến độ lưu ở thư mục tạm → Chạy lại bỏ qua cảnh đã xong)
         key = hashlib.sha1(json.dumps([[x.to_dict() for x in pieces], aspect, fit, blur_subs, bg_volume > 0,
-                                       data.get("ocr_events") is not None], sort_keys=True).encode()).hexdigest()
+                                       data.get("ocr_events") is not None, data.get("ocr_version"),
+                                       vs_render.BLUR_PAD, vs_render.BLUR_BRIDGE], sort_keys=True).encode()).hexdigest()
         state_file = ctx.temp_dir / "edit_state.json"
         state = _load_json(state_file)
         if state.get("key") != key:
@@ -543,7 +585,7 @@ def register(registry: TaskRegistry, tools_provider: Callable[[], FFmpegTools],
     registry.register(TaskSpec(KIND_SCRIPT, "Làm lại video: lấy SUB & viết lại",
                                make_script_handler(tools_provider, settings_provider, paths.models_dir),
                                validate_script))
-    registry.register(TaskSpec(KIND_VOICE, "Làm lại video: giọng đọc", make_voice_handler(paths.models_dir),
+    registry.register(TaskSpec(KIND_VOICE, "Làm lại video: giọng đọc", make_voice_handler(paths.models_dir, tools_provider),
                                validate_voice))
     registry.register(TaskSpec(KIND_EDIT, "Làm lại video: dựng video", make_edit_handler(tools_provider, settings_provider),
                                validate_edit))

@@ -17,13 +17,15 @@ from PySide6.QtWidgets import (
 from pas.core.errors import PasError
 from pas.jobs.models import FINISHED_STATUSES, JobEvent, JobStatus
 from pas.modules.clips.tasks import ASPECT_LABELS, FITS, VIDEO_EXTENSIONS
-from pas.modules.remake import asr, edit, models, project, script, tts
+from pas.modules.remake import asr, edit, models, project, script, tts, vieneu_tts
 from pas.modules.remake.tasks import KIND_EDIT, KIND_SCRIPT, KIND_SEO, KIND_VOICE, MAX_CREDIT, MAX_TITLE
 from pas.modules.safety import models as sf_models
 from pas.services import AppServices
 from pas.ui.widgets import PageHeader, PathPicker, button, format_duration, format_size, hint_label, open_in_explorer, show_error
 
 FILE_FILTER = "Video ({});;Tất cả (*.*)".format(" ".join(f"*{e}" for e in sorted(VIDEO_EXTENSIONS)))
+SAMPLE_FILTER = "Âm thanh/video ({});;Tất cả (*.*)".format(" ".join(f"*{e}" for e in sorted(vieneu_tts.SAMPLE_EXTENSIONS)))
+CLONE = ""  # mục "nhân bản từ file mẫu" trong danh sách giọng VieNeu
 STEP_NAMES = {KIND_SCRIPT: "Bước 1", KIND_VOICE: "Bước 2", KIND_EDIT: "Bước 3", KIND_SEO: "Bước 4"}
 
 
@@ -41,7 +43,7 @@ class RemakePage(QWidget):
             "Làm lại video",
             "Từ một video có lời thoại: lấy transcript gốc → dịch theo ngữ cảnh → viết lại lời kể tiếng Việt có hook mở đầu "
             "→ đọc bằng giọng mới → dựng lại video (cắt cảnh ngắn, đổi thứ tự, zoom/crop, chữ, khớp giọng mới) "
-            "→ thumbnail + tiêu đề + từ khóa. Chạy trên máy (Whisper, Ollama, Piper). File gốc không bị thay đổi. "
+            "→ thumbnail + tiêu đề + từ khóa. Chạy trên máy (Whisper, Ollama, VieNeu/Piper). File gốc không bị thay đổi. "
             "Làm lại KHÔNG xóa bản quyền của video gốc — hãy ghi nguồn và chỉ dùng video bạn có quyền.",
         ))
 
@@ -112,9 +114,18 @@ class RemakePage(QWidget):
                                      "Mỗi đoạn cách nhau một dòng trống.")
         self.text.setMinimumHeight(160)
         self.voice = QComboBox()
+        self.voice.addItem("VieNeu v3 Turbo — giọng tự nhiên, có giọng có sẵn hoặc nhân bản từ file mẫu (Apache-2.0)",
+                           vieneu_tts.KEY)
         for k, v in models.VOICES.items():
-            self.voice.addItem(f"{k} — {v.label}", k)
+            self.voice.addItem(f"Piper {k} — {v.label}", k)
         self.voice.currentIndexChanged.connect(self._sync)
+        self.preset = QComboBox()
+        for pr in vieneu_tts.presets():
+            self.preset.addItem(f"{pr.name} — {pr.description}" if pr.description else pr.name, pr.name)
+        self.preset.addItem("Nhân bản từ file mẫu…", CLONE)
+        self.preset.currentIndexChanged.connect(self._sync)
+        self.sample = PathPicker("file", SAMPLE_FILTER, "File 3–8 giây, một người nói rõ, không nhạc nền")
+        self.sample.path_changed.connect(lambda _: self._sync())
         self.speaker = QSpinBox()
         self.tone = QComboBox()
         for k, t in tts.TONES.items():
@@ -122,7 +133,7 @@ class RemakePage(QWidget):
         self.voice_status = QLabel()
         self.voice_status.setWordWrap(True)
         self.btn_voice_dl = button("Tải giọng đọc…")
-        self.btn_voice_dl.clicked.connect(lambda: self._download(models.VOICES[self.voice.currentData()].pack))
+        self.btn_voice_dl.clicked.connect(lambda: self._download(self._voice_pack()))
         vrow = QHBoxLayout()
         vrow.addWidget(self.voice_status, 1)
         vrow.addWidget(self.btn_voice_dl)
@@ -130,12 +141,18 @@ class RemakePage(QWidget):
         self.btn_voice.clicked.connect(self._run_voice)
         f2.addRow("Kịch bản", self.text)
         f2.addRow("Giọng", self.voice)
+        f2.addRow("Giọng VieNeu", self.preset)
+        f2.addRow("File giọng mẫu", self.sample)
         f2.addRow("Người đọc", self.speaker)
         f2.addRow("Tông giọng", self.tone)
         f2.addRow(vrow)
-        f2.addRow(hint_label("Xuất riêng 'giọng đọc.wav'. Thư viện Piper: GPL-3.0. Khi đăng video, ghi nguồn giọng đọc "
+        self.clone_hint = hint_label(vieneu_tts.CLONE_NOTE + " File mẫu chỉ được đọc, không bị thay đổi.")
+        f2.addRow(self.clone_hint)
+        f2.addRow(hint_label("Xuất riêng 'giọng đọc.wav'. VieNeu đọc chậm hơn Piper (kịch bản 5 phút ≈ 6 phút trên CPU); "
+                             "với VieNeu, tông giọng chỉ đổi khoảng nghỉ. Khi đăng video, ghi nguồn giọng đọc "
                              "(có sẵn trong SEO.txt ở bước 4)."))
         f2.addRow(self.btn_voice)
+        self.f2 = f2
         lay.addWidget(b2)
 
         # ---- bước 3
@@ -213,6 +230,10 @@ class RemakePage(QWidget):
 
     # ------------------------------------------------------------ trạng thái
 
+    def _voice_pack(self):
+        key = self.voice.currentData()
+        return models.VIENEU if key == vieneu_tts.KEY else models.VOICES[key].pack
+
     def _busy(self) -> bool:
         if self.job_id is None:
             return False
@@ -230,23 +251,34 @@ class RemakePage(QWidget):
         self.btn_whisper.setVisible(not has_whisper)
         self.btn_whisper.setEnabled(models.WHISPER.key not in downloading)
 
-        v = models.VOICES[self.voice.currentData()]
-        self.speaker.setRange(0, v.speakers - 1)
-        self.speaker.setEnabled(v.speakers > 1)
-        has_voice = sf_models.is_installed(mdir, v.pack)
-        lic = f"Giấy phép: {v.pack.license}."
-        self.voice_status.setText(f"Giọng {v.key}: đã có. {lic}" if has_voice else
-                                  f"Đang tải giọng {v.key}…" if v.pack.key in downloading else
-                                  f"Chưa tải giọng {v.key} ({v.pack.size / 1e6:.0f} MB). {lic}")
-        self.btn_voice_dl.setVisible(not has_voice)
-        self.btn_voice_dl.setEnabled(v.pack.key not in downloading)
+        is_vieneu = self.voice.currentData() == vieneu_tts.KEY
+        cloning = is_vieneu and self.preset.currentData() == CLONE
+        self.f2.setRowVisible(self.preset, is_vieneu)
+        self.f2.setRowVisible(self.sample, cloning)
+        self.f2.setRowVisible(self.clone_hint, cloning)
+        self.f2.setRowVisible(self.speaker, not is_vieneu)
+        pack = self._voice_pack()
+        name = "VieNeu v3 Turbo" if is_vieneu else f"giọng {self.voice.currentData()}"
+        if not is_vieneu:
+            v = models.VOICES[self.voice.currentData()]
+            self.speaker.setRange(0, v.speakers - 1)
+            self.speaker.setEnabled(v.speakers > 1)
+        has_voice = sf_models.is_installed(mdir, pack)
+        lib_ok = not is_vieneu or vieneu_tts.available()
+        lic = f"Giấy phép: {pack.license}."
+        self.voice_status.setText(f"Chưa cài thư viện VieNeu — {vieneu_tts.INSTALL_HINT}" if not lib_ok else
+                                  f"{name}: đã có. {lic}" if has_voice else
+                                  f"Đang tải {name}…" if pack.key in downloading else
+                                  f"Chưa tải {name} ({pack.size / 1e6:.0f} MB). {lic}")
+        self.btn_voice_dl.setVisible(lib_ok and not has_voice)
+        self.btn_voice_dl.setEnabled(pack.key not in downloading)
         self.fit.setEnabled(self.aspect.currentData() != "original")
 
         has_proj = bool(self.project_dir)
         pdir = Path(self.project_dir) if has_proj else None
         has_wav = has_proj and (pdir / project.VOICE_WAV).is_file() and (pdir / project.VOICE_JSON).is_file()
         self.btn_script.setEnabled(not busy)
-        self.btn_voice.setEnabled(not busy and has_proj)
+        self.btn_voice.setEnabled(not busy and has_proj and (not cloning or bool(self.sample.path())))
         self.btn_edit.setEnabled(not busy and has_wav)
         self.btn_seo.setEnabled(not busy and has_proj)
         self.btn_project.setEnabled(not busy)
@@ -322,10 +354,16 @@ class RemakePage(QWidget):
         })
 
     def _run_voice(self) -> None:
-        self._submit(KIND_VOICE, f"Làm lại: giọng đọc {Path(self.project_dir).name}", {
-            "project_dir": self.project_dir, "text": self.text.toPlainText(), "voice": self.voice.currentData(),
-            "tone": self.tone.currentData(), "speaker": self.speaker.value(),
-        })
+        params = {"project_dir": self.project_dir, "text": self.text.toPlainText(), "voice": self.voice.currentData(),
+                  "tone": self.tone.currentData()}
+        if params["voice"] == vieneu_tts.KEY:
+            if self.preset.currentData() == CLONE:
+                params["sample"] = self.sample.path()
+            else:
+                params["preset"] = self.preset.currentData()
+        else:
+            params["speaker"] = self.speaker.value()
+        self._submit(KIND_VOICE, f"Làm lại: giọng đọc {Path(self.project_dir).name}", params)
 
     def _run_edit(self) -> None:
         self._submit(KIND_EDIT, f"Làm lại: dựng video {Path(self.project_dir).name}", {
@@ -410,7 +448,9 @@ def render_result(kind: str | None, r: dict) -> str:
     if kind == KIND_VOICE:
         out = ok.format(f"Bước 2 xong: giọng đọc {format_duration(r['duration'])} ({r['segments']} đoạn, "
                         f"{r['matched']} đoạn khớp kịch bản bước 1).")
-        out += f"<p>File: {e(Path(r['wav']).name)} — giọng {e(r['voice'])}, tông {e(tts.TONES[r['tone']].label)}.</p>"
+        who = (f"VieNeu, nhân bản từ {r['sample']}" if r.get("sample") else
+               f"VieNeu {r['preset']}" if r.get("preset") else f"Piper {r['voice']}")
+        out += f"<p>File: {e(Path(r['wav']).name)} — giọng {e(who)}, tông {e(tts.TONES[r['tone']].label)}.</p>"
         out += f"<p style='color:#8a5a00'>Giấy phép: {e(r['license'])}. {e(r.get('note') or '')}</p>"
         if r["matched"] < r["segments"]:
             out += ("<p>Những đoạn không khớp kịch bản bước 1 (đã sửa/thêm) sẽ dùng cảnh theo vị trí tương ứng "
