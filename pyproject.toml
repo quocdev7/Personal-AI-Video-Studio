@@ -28,6 +28,13 @@ remake = [
     "personal-ai-studio[asr,tts,vietsub]",
     "pillow>=10",
 ]
+# Phim ngắn AI: tạo ảnh bằng OpenVINO GenAI (Apache-2.0, chạy CPU Intel, không cần torch); mô hình ảnh tải riêng
+# khi người dùng đồng ý. Giọng Anh dùng Piper (nhóm tts), lời thoại do Ollama viết, Pillow kiểm tra ảnh.
+aifilm = [
+    "personal-ai-studio[tts]",
+    "openvino-genai==2026.4.1.0",
+    "pillow>=10",
+]
 # Kiểm duyệt (che khỏa thân / bạo lực / chữ thô tục): NudeNet (MIT) — chỉ dùng file mô hình ONNX đi kèm, chạy bằng
 # onnxruntime (MIT); Pillow (MIT-CMU) để đổi kích thước ảnh. Mô hình CLIP (MIT) tải riêng khi người dùng đồng ý.
 safety = [

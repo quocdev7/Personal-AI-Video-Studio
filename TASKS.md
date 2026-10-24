@@ -2,10 +2,11 @@
 
 Trạng thái: **Đã test** = có test tự động chạy qua · **Đã làm, chưa test** · **Chưa làm** · **Bị chặn** (cần quyết định/tài nguyên).
 
-Lần chạy test gần nhất: 2026-10-22, `uv run pytest` → **222 passed, 1 skipped**
+Lần chạy test gần nhất: 2026-10-24, `uv run pytest` → **239 passed, 1 skipped**
 (test gọi Ollama thật, chỉ chạy khi đặt `PAS_TEST_OLLAMA=1` — đã chạy riêng ngày 2026-10-19: passed),
 Windows 11, Python 3.12.13, FFmpeg 9.0.2 (bản build Gyan), RapidOCR 1.4.4, Ollama 0.40.5 + qwen2.5:7b,
-NudeNet 3.4.2, onnxruntime (CPU), faster-whisper + large-v3-turbo, piper-tts 1.8 (giọng vais1000, vivos), vieneu 3.8.3 + VieNeu-TTS v3 Turbo (ONNX).
+NudeNet 3.4.2, onnxruntime (CPU), faster-whisper + large-v3-turbo, piper-tts 1.8 (giọng vais1000, vivos), vieneu 3.8.3 + VieNeu-TTS v3 Turbo (ONNX),
+openvino-genai 2026.4.1.0 + LCM Dreamshaper v7 int8 (Phim ngắn AI), giọng Piper tiếng Anh libritts_r, john, norman, kristin.
 
 ## Giai đoạn 1 — Khảo sát & tài liệu
 | Việc | Trạng thái |
@@ -110,6 +111,19 @@ Thử trên video thật `docs/1276877940-1-192.mp4` (4 phút 52 giây, 1280×72
 | Chạy lại sau gián đoạn (dùng lại transcript, bản dịch từng lô) | Đã làm + dùng thật khi chạy lại bước 1; **chưa có test gián đoạn riêng** |
 | Video dài (> 10 phút) | **Chưa test** |
 
+## Phim ngắn AI (Module I — trang "Phim ngắn AI", 3 bước)
+Mẫu: `docs/ssstik.io_1792854804178.mp4` (phim ngắn 9:16 kiểu truyện huyền huyễn, ảnh AI + lời thoại + phụ đề giữa
+màn hình). Chạy thật ngày 2026-10-24 trên i5-14400 CPU, qua hàng đợi tác vụ thật (`aifilm.story/images/render`),
+ý tưởng: "cô gái tóc bạc bị bắt nạt hóa ra là công chúa rồng…", 8 cảnh.
+
+| Việc | Trạng thái |
+|---|---|
+| 1. Viết kịch bản (Ollama qwen2.5:7b): nhân vật + ngoại hình, 4–12 cảnh, lời thoại EN + phụ đề VI, chuyển động → `kịch bản.txt` (người dùng sửa được trước bước 2) | Đã test (unit, Ollama giả) + chạy thật: lần 1 316 s, lần 2 151 s (đạt ngay lần đầu). Tự kiểm tra và hỏi lại mô hình khi: sai số cảnh, người nói lạ, lời EN là mô tả hành động, VI còn chữ Anh, tên nhân vật không phải tiếng Anh |
+| 2. Ảnh tĩnh AI (LCM Dreamshaper v7 int8, OpenVINO CPU, 512×896) — nhân vật giữ ngoại hình bằng mô tả + seed cố định | Đã test (unit, engine giả) + chạy thật: 8 ảnh 236–244 s (~28–30 s/ảnh). Xem bằng mắt: đúng nhân vật/bối cảnh, nhất quán **tương đối** |
+| 3. Dựng video: chuyển động zoom/pan, giọng TTS tiếng Anh nhiều nhân vật (Piper), phụ đề VI giữa màn hình + EN nhỏ, tiêu đề, nhãn "Nội dung tạo bằng AI" → `phim.mp4` + `ghi nguồn.txt` | Đã test (FFmpeg thật) + chạy thật: 23,8 s, 720×1280 H.264/AAC, 4,35 MB, 18 s. Xem lưới khung hình + khung chuyển động: đúng. **Chưa nghe giọng bằng tai** |
+| Tải mô hình (hiện dung lượng + giấy phép, hỏi trước) | Đã test + tải thật: LCM 1042,3 MB (MIT), libritts_r 78,6 MB (CC BY 4.0 — phải ghi nguồn), john/norman/kristin 63,5 MB mỗi giọng (LibriVox, public domain) |
+| Trang UI (3 bước, khóa bước chưa đủ điều kiện, xem ảnh, mở dự án cũ) | Đã test (offscreen). **Chưa bấm chạy 3 bước từ UI bằng tay** |
+
 ## Giai đoạn 5–8
 Chưa làm. Xem [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
@@ -127,6 +141,9 @@ Chưa làm. Xem [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 - Làm lại video: chất lượng lời Việt còn lỗi (xem mục sửa lỗi bên dưới) — bắt buộc đọc và sửa `kịch bản.txt` trước bước 2.
 - Việt hóa phụ đề (vietsub) vẫn dịch thẳng Trung → Việt — có thể gặp lỗi lẫn chữ Hán/đổi tên vật như đã thấy ở Làm lại video.
 - Chưa kiểm thử ổ đĩa đầy thật (mới giả lập).
+- Phim ngắn AI: là ảnh tĩnh + chuyển động máy quay, **không phải video AI thật** như mẫu; nhân vật chỉ giống nhau tương đối
+  giữa các cảnh; mô hình đôi khi bỏ tình tiết trong ý tưởng (cảnh tát không được viết) và có câu Việt gượng — cần đọc và
+  sửa kịch bản trước bước 2. Giọng libritts_r cần ghi nguồn CC BY 4.0 (đã ghi tự động trong `ghi nguồn.txt`).
 
 ## Sửa lỗi phát hiện khi test (GĐ2)
 - Trùng tên dự án tiếng Việt khác hoa/thường không bị chặn (SQLite NOCASE chỉ áp dụng ASCII) → so sánh `casefold` + chuẩn hóa NFC.

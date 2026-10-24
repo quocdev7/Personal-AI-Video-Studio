@@ -12,6 +12,8 @@ from pas.media.ffmpeg import FFmpegTools
 
 def register_all(registry: TaskRegistry, tools_provider: Callable[[], FFmpegTools],
                  settings_provider: Callable[[], Settings], paths: AppPaths | None = None) -> None:
+    from pas.modules.aifilm import models as aifilm_models
+    from pas.modules.aifilm import tasks as aifilm_tasks
     from pas.modules.clips import tasks as clips_tasks
     from pas.modules.media_check import tasks as media_check_tasks
     from pas.modules.remake import models as remake_models
@@ -22,4 +24,5 @@ def register_all(registry: TaskRegistry, tools_provider: Callable[[], FFmpegTool
     clips_tasks.register(registry, tools_provider, settings_provider, paths)
     if paths is not None:
         remake_tasks.register(registry, tools_provider, settings_provider, paths)
-        safety_models.register(registry, paths.models_dir, extra=remake_models.PACKS)
+        aifilm_tasks.register(registry, tools_provider, settings_provider, paths)
+        safety_models.register(registry, paths.models_dir, extra={**remake_models.PACKS, **aifilm_models.PACKS})

@@ -307,3 +307,57 @@ def test_remake_render_results():
                                      "seo_file": "D:/a/SEO.txt", "titles": ["T1"], "keywords": ["k"],
                                      "hashtags": ["#h"], "audience": "a", "note": "Không có số liệu"})
     assert "T1" in o and "thumbnail 1.jpg" in o and "Không có số liệu" in o
+
+
+
+def test_aifilm_steps_and_params(window, monkeypatch, tmp_path):
+    from PySide6.QtWidgets import QMessageBox
+
+    from pas.modules.aifilm import project
+    from pas.modules.aifilm.tasks import KIND_IMAGES, KIND_RENDER, KIND_STORY
+
+    page = window.aifilm
+    assert page.btn_story.isEnabled() and not page.btn_images.isEnabled() and not page.btn_render.isEnabled()
+    assert not page.btn_models.isHidden() and "Chưa tải" in page.model_status.text()
+    shown = []
+    monkeypatch.setattr("pas.ui.pages.aifilm.show_error", lambda parent, exc, title: shown.append(exc))
+    page.btn_story.click()  # ý tưởng trống → lỗi validate, không tạo tác vụ
+    assert shown and page.job_id is None
+
+    submitted = _fake_submit(window, monkeypatch, job_id=5)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.No)
+    page.btn_models.click()
+    assert submitted == []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    page.btn_models.click()
+    assert [p["model"] for _, p in submitted] == [pk.key for pk in page._missing_packs()] and len(submitted) == 5
+    page.downloads.clear()
+    submitted.clear()
+
+    page.idea.setPlainText("Cô gái tóc bạc có bí mật")
+    page.shots.setValue(8)
+    page.btn_story.click()
+    assert submitted == [(KIND_STORY, {"idea": "Cô gái tóc bạc có bí mật", "shots": 8, "output_dir": ""})]
+
+    pdir = tmp_path / UNICODE_DIR / "T - phim AI"
+    (pdir / project.IMAGES).mkdir(parents=True)
+    project.save(pdir, {"version": 1, "images": {}})
+    (pdir / project.SCRIPT_TXT).write_text("TIÊU ĐỀ: T\n", encoding="utf-8")
+    page.job_id = None
+    page.set_project(pdir)
+    assert page.script.toPlainText() == "TIÊU ĐỀ: T\n" and not page.btn_render.isEnabled()
+    from PIL import Image
+    Image.new("RGB", (512, 912), "red").save(pdir / project.shot_image_name(1))
+    page.set_project(pdir)
+    assert page.gallery.count() == 1 and page.btn_render.isEnabled()
+    submitted.clear()
+    page.regen.setText("2, 5")
+    page.fast.setChecked(True)
+    page.btn_images.setEnabled(True)  # thư viện OpenVINO có thể chưa cài trên máy chạy test
+    page.btn_images.click()
+    page.job_id = None
+    page.show_en.setChecked(True)
+    page.btn_render.click()
+    assert submitted[0] == (KIND_IMAGES, {"project_dir": str(pdir), "script": "TIÊU ĐỀ: T\n", "regenerate": [2, 5],
+                                          "fast": True})
+    assert submitted[1][0] == KIND_RENDER and submitted[1][1]["show_en"] and "music" not in submitted[1][1]

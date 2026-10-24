@@ -99,6 +99,28 @@ dùng phi thương mại (CC BY-NC-SA) và đọc sai một số dấu huyền/n
 giọng chỉ khi người dùng có quyền dùng giọng trong file mẫu (ứng dụng nhắc mỗi lần, không kiểm chứng được).
 Không tự đăng video lên nền tảng nào.
 
+### Module I — Phim ngắn AI (yêu cầu 2026-10-24, mẫu `docs/ssstik.io_1792854804178.mp4`)
+Trang **Phim ngắn AI**: từ một ý tưởng ra một phim ngắn dọc 9:16 kiểu "truyện tranh động" — ảnh minh họa do AI vẽ trên
+máy + chuyển động máy quay (FFmpeg), lời thoại tiếng Anh nhiều giọng, phụ đề tiếng Việt ở giữa khung. Thư mục dự án
+`<tiêu đề> - phim AI` (`aifilm.json`, `kịch bản.txt`, `ảnh/`, `giọng/`, `phim.mp4`, `ghi nguồn.txt`). Ba bước, mỗi
+bước một tác vụ nền:
+
+1. **Viết kịch bản** (`aifilm.story`): ý tưởng (10–1000 ký tự, tiếng Việt được) + số cảnh (6–30) → Ollama qwen2.5:7b
+   viết tiêu đề, phong cách hình chung, 2–4 nhân vật (giới tính + ngoại hình cố định), từng cảnh (người nói, mô tả ảnh,
+   chuyển động, câu EN, phụ đề VI). Kiểm tra và thử lại tối đa 3 lần (tên người nói lạ, thiếu phụ đề, chữ Hán, câu EN
+   là lời tả hành động thay vì lời nói, phụ đề VI còn từ tiếng Anh). Kết quả là file văn bản người dùng **sửa được**.
+2. **Vẽ ảnh** (`aifilm.images`): LCM Dreamshaper v7 INT8 (OpenVINO, CPU) 512×912, 6 bước (4 bước = nhanh) ≈ 28 s/ảnh;
+   mô tả ảnh = ngoại hình nhân vật (lần đầu) + mô tả cảnh + phong cách chung; seed cố định theo cảnh → chạy lại chỉ vẽ
+   cảnh đổi mô tả hoặc được chọn "vẽ lại".
+3. **Dựng phim** (`aifilm.render`): Piper đọc từng câu bằng giọng của nhân vật (libritts_r nhiều người đọc, john,
+   norman, kristin; không hai nhân vật trùng giọng) → mỗi cảnh dài theo câu thoại (tối thiểu 2,2 s) với chuyển động
+   (zoom vào/ra, lia 4 hướng, rung, lóe sáng) → ghép + phụ đề ASS (VI lớn ở giữa, EN nhỏ tùy chọn, tiêu đề, nhãn
+   "Nội dung tạo bằng AI") + nhạc nền tùy chọn → `phim.mp4` 720×1280 hoặc 1080×1920.
+
+Giới hạn trung thực: không có video AI thật (chỉ ảnh tĩnh + chuyển động); nhân vật giữa các cảnh chỉ giống tương đối
+(cùng mô tả ngoại hình, không có khóa nhận dạng); ảnh AI có thể sai tay/mặt; kịch bản của mô hình 7B cần người xem lại.
+Giọng đọc chỉ tiếng Anh. Không tự đăng video.
+
 ## 5. Yêu cầu phi chức năng
 
 | Mã | Yêu cầu |

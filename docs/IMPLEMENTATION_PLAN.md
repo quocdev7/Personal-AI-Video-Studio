@@ -69,6 +69,14 @@ Module `pas.modules.remake` + trang "Làm lại video": transcript (Whisper) →
 lượng) → 3 thumbnail + tiêu đề/mô tả/từ khóa. Còn lại: xem trước/chọn cảnh bằng tay, sửa bản dịch trong ứng dụng, nhạc
 nền riêng, dữ liệu từ khóa thật (cần dịch vụ ngoài — chưa được duyệt).
 
+### Phim ngắn AI (Module I — làm theo yêu cầu 2026-10-24)
+Module `pas.modules.aifilm` + trang "Phim ngắn AI": ý tưởng → kịch bản (Ollama) người dùng sửa được → ảnh (LCM
+Dreamshaper v7 INT8 qua OpenVINO GenAI, CPU) → giọng tiếng Anh nhiều nhân vật (Piper) + chuyển động + phụ đề Việt
+(FFmpeg). Người dùng đã chọn: ảnh tĩnh + chuyển động (không video AI), 9:16, EN đọc + VI phụ đề, mô hình LCM
+(1,04 GB, MIT), giọng libritts_r/john/norman/kristin (public domain). Còn lại: giữ nhân vật giống nhau giữa các cảnh
+(IP-Adapter/LoRA — mô hình lớn hơn, chưa duyệt), giọng đọc tiếng Việt cho nhân vật, hiệu ứng chuyển cảnh, sửa từng
+ảnh bằng tay trong ứng dụng.
+
 ## Giai đoạn 7 — Hoàn thiện UI
 Kéo thả hàng loạt, phím tắt, ghi nhớ thư mục gần đây, giao diện tối, cải thiện thông báo lỗi dựa trên log thực tế.
 

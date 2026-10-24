@@ -15,6 +15,7 @@ from pas.ui.pages.dashboard import DashboardPage
 from pas.ui.pages.jobs_pages import HistoryPage, QueuePage
 from pas.ui.pages.media_check import MediaCheckPage
 from pas.ui.pages.projects import ProjectsPage
+from pas.ui.pages.aifilm import AiFilmPage
 from pas.ui.pages.remake import RemakePage
 from pas.ui.pages.settings import SettingsPage
 
@@ -42,6 +43,7 @@ class MainWindow(QMainWindow):
         self.media_check = MediaCheckPage(services)
         self.clips = ClipsPage(services)
         self.remake = RemakePage(services)
+        self.aifilm = AiFilmPage(services)
         self.queue = QueuePage(services)
         self.history = HistoryPage(services)
         self.settings = SettingsPage(services)
@@ -49,6 +51,7 @@ class MainWindow(QMainWindow):
             ("Tổng quan", self.dashboard),
             ("Tạo clip ngắn", self.clips),
             ("Làm lại video", self.remake),
+            ("Phim ngắn AI", self.aifilm),
             ("Dự án", self.projects),
             ("Kiểm tra media", self.media_check),
             ("Hàng đợi", self.queue),
@@ -110,6 +113,7 @@ class MainWindow(QMainWindow):
         self.media_check.on_job_event(event)
         self.clips.on_job_event(event)
         self.remake.on_job_event(event)
+        self.aifilm.on_job_event(event)
         if not self._refresh_timer.isActive():
             self._refresh_timer.start()
 

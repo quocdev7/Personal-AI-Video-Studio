@@ -108,6 +108,29 @@
     - Ghép cảnh tự động theo nội dung lời thoại gốc, không "xem" hình — có thể chọn cảnh chưa đẹp.
     - Làm lại (dịch, đổi giọng, cắt ghép) **không** làm mất bản quyền của video gốc. Chỉ đăng khi bạn có quyền dùng
       nội dung nguồn.
+- **Phim ngắn AI** — từ một ý tưởng ra phim ngắn dọc 9:16 kiểu truyện tranh động: ảnh minh họa do AI vẽ trên máy,
+  máy quay chuyển động, nhân vật nói tiếng Anh bằng các giọng khác nhau, phụ đề tiếng Việt ở giữa khung.
+  - Cài một lần:
+    1. `uv sync --extra aifilm` (OpenVINO GenAI Apache-2.0 ~90 MB, Piper GPL-3.0, Pillow).
+    2. Ollama + `ollama pull qwen2.5:7b`.
+    3. Trên trang: **Tải mô hình…** — ứng dụng liệt kê mô hình ảnh LCM Dreamshaper v7 (1,04 GB, MIT) và 4 giọng tiếng
+       Anh (libritts_r 79 MB — CC BY 4.0, phải ghi nguồn khi đăng; john/norman/kristin 64 MB — public domain), chỉ
+       tải khi bạn bấm *Yes*.
+  - **1. Viết kịch bản** — gõ *Ý tưởng* (tiếng Việt được: ai, ở đâu, xung đột gì, cú twist), chọn *Số cảnh* (6–30,
+    mỗi cảnh 2–4 giây) và thư mục lưu → **Viết kịch bản** (qwen2.5:7b trên CPU: khoảng 2–6 phút). Kịch bản hiện ở ô
+    bước 2 và lưu ở `kịch bản.txt` trong thư mục `<tiêu đề> - phim AI`.
+  - **2. Sửa kịch bản & vẽ ảnh** — sửa trực tiếp trong ô (đổi lời, đổi giọng nhân vật, đổi mô tả *ẢNH:*, chuyển động
+    `zoom_in/zoom_out/pan_left/pan_right/pan_up/shake/flash`; xem hướng dẫn cú pháp dưới ô) → **Vẽ ảnh**. Khoảng 28 giây
+    một ảnh (tích *Vẽ nhanh*: 4 bước thay vì 6, nhanh hơn, kém chi tiết hơn). Chạy lại chỉ vẽ cảnh đã đổi mô tả; muốn vẽ lại cảnh xấu thì
+    gõ số cảnh vào *Vẽ lại cảnh* (vd. `3, 5`). Nhấp đúp ảnh trong danh sách để xem lớn.
+  - **3. Dựng phim** — chọn *Độ phân giải* (720×1280 / 1080×1920), hiện câu tiếng Anh nhỏ dưới phụ đề, tiêu đề, nhãn
+    "Nội dung tạo bằng AI", *Nhạc nền* (tùy chọn) + âm lượng → **Dựng phim** (vài chục giây). Kết quả `phim.mp4` và
+    `ghi nguồn.txt`. Sửa lời thoại rồi dựng lại không cần vẽ lại ảnh; giọng đã đọc được dùng lại.
+  - Giới hạn — **hãy xem lại trước khi đăng**:
+    - Kịch bản do mô hình 7B viết: có thể nhạt, lệch ý tưởng, dịch chưa tự nhiên — sửa trước khi vẽ ảnh.
+    - Nhân vật giữa các cảnh chỉ giống tương đối (cùng mô tả), ảnh có thể sai tay/mặt hoặc vô tình giống tác phẩm có
+      sẵn. Không có video AI thật — chỉ ảnh tĩnh + chuyển động.
+    - Giọng đọc chỉ tiếng Anh. Nhạc nền do bạn chọn — bạn chịu trách nhiệm bản quyền của file đó.
 - **Dự án** — nhóm video theo dự án với thư mục đầu vào/đầu ra. "Xóa khỏi danh sách" chỉ xóa bản ghi, **không xóa file**.
 - **Kiểm tra media** — chọn hoặc kéo thả file video/âm thanh → *Bắt đầu kiểm tra*. Kết quả: định dạng, thời lượng,
   độ phân giải, tỷ lệ khung (16:9, 9:16...), FPS, luồng âm thanh và cảnh báo (không có tiếng, thiếu thời lượng...).

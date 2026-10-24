@@ -4,7 +4,8 @@
 dịch/lồng tiếng. Phiên bản hiện tại: **0.1.0 — nền tảng (Giai đoạn 2) + "Tạo clip ngắn"** (thả video vào → tự cắt thành nhiều
 clip 9:16 / 1:1 / 16:9, tùy chọn Việt hóa phụ đề tiếng Trung in trên hình và tự làm mờ nội dung dễ vi phạm tiêu
 chuẩn cộng đồng — khỏa thân, bạo lực / máu me, chữ thô tục) + **"Làm lại video"** (transcript → dịch theo ngữ cảnh →
-viết lại lời kể có hook → giọng đọc tiếng Việt mới → dựng lại video theo giọng → thumbnail + SEO). Xem trạng thái thật tại [TASKS.md](TASKS.md).
+viết lại lời kể có hook → giọng đọc tiếng Việt mới → dựng lại video theo giọng → thumbnail + SEO) + **"Phim ngắn AI"**
+(ý tưởng → kịch bản sửa được → ảnh AI vẽ trên máy → phim 9:16 có chuyển động, lời thoại tiếng Anh nhiều giọng, phụ đề Việt). Xem trạng thái thật tại [TASKS.md](TASKS.md).
 
 ## Chạy từ mã nguồn
 
@@ -17,7 +18,7 @@ uv run pytest                  # chạy test
 ```
 
 Tính năng tùy chọn: `uv sync --extra vietsub` (đọc chữ, RapidOCR), `uv sync --extra safety` (kiểm duyệt: NudeNet,
-onnxruntime, Pillow), `uv sync --extra remake` (Làm lại video: faster-whisper, piper-tts **GPL-3.0**, vieneu Apache-2.0 — giọng có sẵn + nhân bản giọng, RapidOCR, Pillow).
+onnxruntime, Pillow), `uv sync --extra remake` (Làm lại video: faster-whisper, piper-tts **GPL-3.0**, vieneu Apache-2.0 — giọng có sẵn + nhân bản giọng, RapidOCR, Pillow), `uv sync --extra aifilm` (Phim ngắn AI: openvino-genai Apache-2.0, piper-tts **GPL-3.0**, Pillow).
 Cài nhiều nhóm: `uv sync --extra vietsub --extra safety --extra remake`. Dịch/viết lại cần Ollama + `qwen2.5:7b`;
 mô hình Whisper và giọng đọc tải trong ứng dụng (hiện dung lượng + giấy phép trước khi tải).
 

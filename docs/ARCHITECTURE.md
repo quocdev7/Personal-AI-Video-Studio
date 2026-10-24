@@ -160,6 +160,25 @@ Quy tắc phụ thuộc: `ui → services → jobs/projects → modules → medi
 - `models.py` — gói tải qua `model.download` dùng chung (URL cố định theo commit, kiểm tra kích thước + SHA-256).
 - `tasks.py` — `remake.script/voice/edit/seo`; `validate` báo lỗi sớm (thiếu gói/mô hình/Ollama/bước trước).
 
+### modules/aifilm (Phim ngắn AI — trang "Phim ngắn AI", 3 tác vụ)
+- `story.py` — `Story/Character/Shot`; định dạng văn bản `kịch bản.txt` (`TIÊU ĐỀ:`, `PHONG CÁCH:`, `NHÂN VẬT: tên |
+  nam/nữ | giọng | ngoại hình`, `CẢNH n | chuyển động` + `NGƯỜI NÓI/ẢNH/EN/VI`) — `parse_story`/`format_story` round-trip,
+  lỗi chỉ rõ dòng. `write_story`: Ollama (JSON schema) tối đa 3 lần, lần sau kèm danh sách lỗi (`_problems`: người nói
+  lạ, thiếu phụ đề, chữ Hán, câu EN là lời tả hành động — tên nhân vật + động từ, không có ngôi I/you —, phụ đề VI còn
+  từ tiếng Anh của câu EN; hai luật sau thêm sau lần chạy thật 2026-10-24). `assign_voices` không cho hai nhân vật cùng
+  giọng. `image_prompt`: tên nhân vật → ngoại hình lần đầu, "the man/the woman" các lần sau (CLIP chỉ đọc 77 token).
+  `shot_seed` = hash(tiêu đề, cảnh, lần vẽ lại).
+- `imagegen.py` — `openvino_genai.Text2ImagePipeline` (CPU) 512×912, `num_inference_steps` 6 (nhanh: 4), hủy qua callback.
+- `project.py` — thư mục `<tiêu đề> - phim AI`, `aifilm.json` (ảnh theo cảnh, lần vẽ lại, kết quả dựng) ghi nguyên tử.
+- `render.py` — dòng thời gian (thời lượng cảnh = lead + giọng + trail, ≥ 2,2 s), ghép giọng thành một WAV (cùng tần số
+  mẫu, báo lỗi nếu khác), bộ lọc chuyển động `zoompan`/crop theo thời gian cho mỗi cảnh, ASS (VI giữa khung, EN nhỏ,
+  tiêu đề, nhãn AI), lệnh ghép cuối (concat + giọng + nhạc nền âm lượng tùy chọn).
+- `models.py` — gói tải `model.download` dùng chung: LCM (OpenVINO INT8, URL theo commit, SHA-256) + 4 giọng Piper en_US.
+- `tasks.py` — `aifilm.story/images/render`. Ảnh lưu trong `ảnh/kho/<sha1(prompt|seed|kích thước)>.png` (ghi qua `.part`)
+  → chạy lại chỉ vẽ ảnh thiếu; `ảnh/cảnh NN.png` là bản sao để người dùng xem. Giọng lưu `giọng/<sha1>.wav` theo
+  (giọng, người đọc, câu, tông). Bước 2/3 nhận kịch bản đã sửa, lưu lại trước khi chạy (lỗi vẫn không mất bản sửa);
+  bước 3 báo lỗi nếu cảnh chưa có ảnh đúng mô tả hiện tại.
+
 ### ui
 - `JobEventBridge(QObject)` nhận callback từ thread worker và phát Qt signal (queued connection) để trang cập nhật trên main thread.
 - Trang chưa có backend hiển thị **mờ** trong thanh điều hướng với chú thích giai đoạn — không có nút giả.
@@ -206,3 +225,8 @@ Thời gian lưu ISO-8601 UTC. Xóa dự án chỉ xóa bản ghi, **không** đ
   soxr (**LGPL-2.1+**, chỉ liên kết động), cffi/pycparser (MIT/BSD); gradio và librosa bị loại bằng
   `override-dependencies` (chỉ dùng cho demo web / có đường dự phòng soundfile + soxr); Pillow bị giới hạn < 13
   (đang 12.3.0). Pillow (MIT-CMU). Ghi nguồn video gốc + giọng đọc được thêm tự động vào `SEO.txt`.
+- Phim ngắn AI: tải chỉ khi người dùng bấm *Tải mô hình…* và xác nhận một hộp thoại liệt kê dung lượng + giấy phép +
+  nguồn của từng gói: LCM Dreamshaper v7 INT8 (1,04 GB, MIT — huggingface.co/OpenVINO, URL theo commit, SHA-256),
+  giọng Piper en_US (mô hình MIT): libritts_r (79 MB, dữ liệu LibriTTS-R **CC BY 4.0 → ghi nguồn**), john / norman /
+  kristin (64 MB mỗi giọng, dữ liệu LibriVox public domain). Thư viện openvino-genai 2026.4.1.0 (Apache-2.0, chỉ chạy CPU, không gọi mạng). Ollama chỉ nghe
+  127.0.0.1. `ghi nguồn.txt` ghi rõ mô hình ảnh/giọng và lưu ý nội dung tạo bằng AI.

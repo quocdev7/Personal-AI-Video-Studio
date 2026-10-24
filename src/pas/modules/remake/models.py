@@ -38,7 +38,7 @@ WHISPER = ModelPack(
 )
 
 PIPER_REVISION = "c10ece1aade47bb51c153c893d14e5bf8e5b7117"
-_PIPER_BASE = f"https://huggingface.co/rhasspy/piper-voices/resolve/{PIPER_REVISION}/vi/vi_VN/"
+_PIPER_ROOT = f"https://huggingface.co/rhasspy/piper-voices/resolve/{PIPER_REVISION}/"
 
 
 @dataclass(frozen=True)
@@ -51,15 +51,16 @@ class Voice:
     sample_rate: int
 
 
-def _voice(name: str, quality: str, onnx_size: int, onnx_sha: str, json_size: int, json_sha: str,
-           license: str, source: str, note: str, label: str, speakers: int, rate: int) -> Voice:
-    stem = f"vi_VN-{name}-{quality}"
+def piper_voice(name: str, quality: str, onnx_size: int, onnx_sha: str, json_size: int, json_sha: str,
+                license: str, source: str, note: str, label: str, speakers: int, rate: int,
+                locale: str = "vi_VN") -> Voice:
+    """Giọng Piper trên huggingface.co/rhasspy/piper-voices (cố định commit PIPER_REVISION)."""
+    stem = f"{locale}-{name}-{quality}"
     rel = f"piper/{stem}"
+    base = f"{_PIPER_ROOT}{locale.split('_')[0]}/{locale}/{name}/{quality}/{stem}"
     files = (
-        ModelFile(f"{stem}.onnx", stem, f"{rel}.onnx", f"{_PIPER_BASE}{name}/{quality}/{stem}.onnx", onnx_sha,
-                  onnx_size, license, source),
-        ModelFile(f"{stem}.json", stem, f"{rel}.onnx.json", f"{_PIPER_BASE}{name}/{quality}/{stem}.onnx.json",
-                  json_sha, json_size, license, source),
+        ModelFile(f"{stem}.onnx", stem, f"{rel}.onnx", f"{base}.onnx", onnx_sha, onnx_size, license, source),
+        ModelFile(f"{stem}.json", stem, f"{rel}.onnx.json", f"{base}.onnx.json", json_sha, json_size, license, source),
     )
     pack = ModelPack(f"piper-{stem}", f"Giọng đọc Piper {stem} — {label}", files, license,
                      f"huggingface.co/rhasspy/piper-voices, commit {PIPER_REVISION[:7]}; {source}", note)
@@ -67,13 +68,13 @@ def _voice(name: str, quality: str, onnx_size: int, onnx_sha: str, json_size: in
 
 
 VOICES: dict[str, Voice] = {v.key: v for v in (
-    _voice("vais1000", "medium", 63_201_294, "ec7c89e2c85f4d1edc24b6120c18aaf1bda614f06b511567eb9c7c0de15e2dab",
+    piper_voice("vais1000", "medium", 63_201_294, "ec7c89e2c85f4d1edc24b6120c18aaf1bda614f06b511567eb9c7c0de15e2dab",
            4_860, "fafb9da1354ed4b77c31af228ed41fb41cd825c14cffa105454b25e6ae751ee0",
            "Mô hình Piper: MIT; dữ liệu huấn luyện VAIS-1000: CC BY 4.0 (cần ghi nguồn)",
            "dữ liệu VAIS-1000 (ieee-dataport.org)", "Khi đăng nội dung dùng giọng này, ghi nguồn: "
            "\"Giọng đọc: Piper vi_VN-vais1000, dữ liệu VAIS-1000 (CC BY 4.0)\".",
            "giọng nữ miền Bắc, rõ, 22 kHz (khuyên dùng)", 1, 22050),
-    _voice("vivos", "x_low", 27_789_413, "6ab13374eb0862021a545befe7727aef59e16117f1c075aa9e0362237ecc98ae",
+    piper_voice("vivos", "x_low", 27_789_413, "6ab13374eb0862021a545befe7727aef59e16117f1c075aa9e0362237ecc98ae",
            5_592, "9dc373d69b0e4f39d864cb8ac9fe42cee49817a0f02d831e57a9ce6e944e234a",
            "Mô hình Piper: MIT; dữ liệu huấn luyện VIVOS: CC BY-NC-SA 4.0 (CHỈ dùng phi thương mại)",
            "dữ liệu VIVOS (ailab.hcmus.edu.vn)", "Dữ liệu VIVOS chỉ cho phép dùng PHI THƯƠNG MẠI — không dùng cho "
