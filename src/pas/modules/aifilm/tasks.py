@@ -52,6 +52,24 @@ def _story_from_params(proj: Path, params: dict) -> story.Story:
     return parsed
 
 
+def _check_output_dir(params: dict) -> None:
+    out = params.get("output_dir")
+    if out and Path(out).exists() and not Path(out).is_dir():
+        raise InvalidInput(f"Thư mục đầu ra không phải thư mục: {out}")
+
+
+def _create_project(st: story.Story, settings: Settings, output_dir: str | None, idea: str, model: str) -> Path:
+    """Thư mục dự án mới '<tiêu đề> - phim AI' + kịch bản + aifilm.json."""
+    base = Path(output_dir or settings.default_output_dir or Path.home() / "Videos")
+    proj = project.new_project_dir(st.title, base)
+    ensure_free_space(proj.parent if proj.parent.exists() else base, int(settings.min_free_disk_gb * GB))
+    proj.mkdir(parents=True)
+    project.write_text(proj / project.SCRIPT_TXT, story.format_story(st))
+    project.save(proj, {"version": project.VERSION, "created": time.strftime("%Y-%m-%d %H:%M:%S"), "idea": idea,
+                        "model": model, "images": {}, "variants": {}})
+    return proj
+
+
 def _check_script_param(params: dict) -> None:
     text = params.get("script")
     if text is not None:
@@ -72,9 +90,7 @@ def validate_story(params: dict) -> None:
     shots = params.get("shots", story.DEFAULT_SHOTS)
     if not isinstance(shots, int) or isinstance(shots, bool) or not story.MIN_SHOTS <= shots <= story.MAX_SHOTS:
         raise InvalidInput(f"Số cảnh phải từ {story.MIN_SHOTS} đến {story.MAX_SHOTS}.")
-    out = params.get("output_dir")
-    if out and Path(out).exists() and not Path(out).is_dir():
-        raise InvalidInput(f"Thư mục đầu ra không phải thư mục: {out}")
+    _check_output_dir(params)
 
 
 def make_story_handler(settings_provider: Callable[[], Settings], client_factory=_client):
@@ -86,14 +102,8 @@ def make_story_handler(settings_provider: Callable[[], Settings], client_factory
         client = client_factory(settings)
         st = story.write_story(client, idea, shots, ctx)
         ctx.checkpoint()
-        base = Path(p.get("output_dir") or settings.default_output_dir or Path.home() / "Videos")
-        proj = project.new_project_dir(st.title, base)
-        ensure_free_space(proj.parent if proj.parent.exists() else base, int(settings.min_free_disk_gb * GB))
-        proj.mkdir(parents=True)
+        proj = _create_project(st, settings, p.get("output_dir"), idea, getattr(client, "model", ""))
         text = story.format_story(st)
-        project.write_text(proj / project.SCRIPT_TXT, text)
-        project.save(proj, {"version": project.VERSION, "created": time.strftime("%Y-%m-%d %H:%M:%S"), "idea": idea,
-                            "model": getattr(client, "model", ""), "images": {}, "variants": {}})
         talk = sum(1 for s in st.shots if s.en)
         ctx.log(f"Kịch bản '{st.title}': {len(st.characters)} nhân vật, {len(st.shots)} cảnh ({talk} cảnh có thoại)")
         ctx.report(1.0, "Đã viết kịch bản")
@@ -127,8 +137,11 @@ def image_status(proj: Path, st: story.Story, data: dict) -> list[tuple[story.Sh
 
 
 def validate_images(params: dict) -> None:
-    project.validate_project_dir(params)
+    """Có dự án → vẽ cho dự án đó; chưa có → cần kịch bản dán sẵn, tác vụ tạo dự án mới (bỏ qua bước 1)."""
+    if params.get("project_dir") or not (isinstance(params.get("script"), str) and params["script"].strip()):
+        project.validate_project_dir(params)
     _check_script_param(params)
+    _check_output_dir(params)
     regen = params.get("regenerate", [])
     if not isinstance(regen, list) or not all(isinstance(i, int) and not isinstance(i, bool) and i > 0 for i in regen):
         raise InvalidInput("Danh sách cảnh cần vẽ lại không hợp lệ.", "Ví dụ: 2, 5, 7")
@@ -140,9 +153,14 @@ def make_images_handler(models_dir: Path, settings_provider: Callable[[], Settin
                         generator_factory: Callable[[Path], imagegen.Generator] = imagegen.load):
     def run(ctx: JobContext) -> dict:
         p = ctx.params
-        proj = project.validate_project_dir(p)
+        if p.get("project_dir"):
+            proj = project.validate_project_dir(p)
+            st = _story_from_params(proj, p)
+        else:
+            st = story.parse_story(p["script"])
+            proj = _create_project(st, settings_provider(), p.get("output_dir"), "", "")
+            ctx.log(f"Tạo dự án mới từ kịch bản dán sẵn: {proj}")
         data = project.load(proj)
-        st = _story_from_params(proj, p)
         steps = imagegen.FAST_STEPS if p.get("fast") else imagegen.STEPS
         variants = data.setdefault("variants", {})
         for i in p.get("regenerate", []):

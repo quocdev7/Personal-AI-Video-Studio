@@ -2,7 +2,7 @@
 
 Trạng thái: **Đã test** = có test tự động chạy qua · **Đã làm, chưa test** · **Chưa làm** · **Bị chặn** (cần quyết định/tài nguyên).
 
-Lần chạy test gần nhất: 2026-10-24, `uv run pytest` → **239 passed, 1 skipped**
+Lần chạy test gần nhất: 2026-10-26, `uv run pytest` → **240 passed, 1 skipped**
 (test gọi Ollama thật, chỉ chạy khi đặt `PAS_TEST_OLLAMA=1` — đã chạy riêng ngày 2026-10-19: passed),
 Windows 11, Python 3.12.13, FFmpeg 9.0.2 (bản build Gyan), RapidOCR 1.4.4, Ollama 0.40.5 + qwen2.5:7b,
 NudeNet 3.4.2, onnxruntime (CPU), faster-whisper + large-v3-turbo, piper-tts 1.8 (giọng vais1000, vivos), vieneu 3.8.3 + VieNeu-TTS v3 Turbo (ONNX),
@@ -123,6 +123,7 @@ màn hình). Chạy thật ngày 2026-10-24 trên i5-14400 CPU, qua hàng đợi
 | 3. Dựng video: chuyển động zoom/pan, giọng TTS tiếng Anh nhiều nhân vật (Piper), phụ đề VI giữa màn hình + EN nhỏ, tiêu đề, nhãn "Nội dung tạo bằng AI" → `phim.mp4` + `ghi nguồn.txt` | Đã test (FFmpeg thật) + chạy thật: 23,8 s, 720×1280 H.264/AAC, 4,35 MB, 18 s. Xem lưới khung hình + khung chuyển động: đúng. **Chưa nghe giọng bằng tai** |
 | Tải mô hình (hiện dung lượng + giấy phép, hỏi trước) | Đã test + tải thật: LCM 1042,3 MB (MIT), libritts_r 78,6 MB (CC BY 4.0 — phải ghi nguồn), john/norman/kristin 63,5 MB mỗi giọng (LibriVox, public domain) |
 | Trang UI (3 bước, khóa bước chưa đủ điều kiện, xem ảnh, mở dự án cũ) | Đã test (offscreen). **Chưa bấm chạy 3 bước từ UI bằng tay** |
+| Sửa 2026-10-26: người dùng dán kịch bản tự viết vào bước 2 nhưng nút "Vẽ ảnh" bị khóa (cần dự án, mà dự án chỉ tạo ở bước 1). Nay: chưa có dự án + có kịch bản → "Vẽ ảnh" tự tạo dự án mới; thêm nút "Dự án mới" để không ghi đè dự án đang mở | Đã test (1 test tác vụ + test UI) + chạy thật qua hàng đợi: dán kịch bản 20 cảnh "Sky - Rồng Của Tôi" không qua bước 1 → tự tạo dự án, 20 ảnh 621 s, dựng phim 38 s → 71,2 s, 720×1280, 17 câu thoại. Xem lưới khung hình: đúng. Ảnh: rồng con hay bị vẽ thiếu/to (cảnh 3–7) |
 
 ## Giai đoạn 5–8
 Chưa làm. Xem [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).

@@ -361,3 +361,17 @@ def test_aifilm_steps_and_params(window, monkeypatch, tmp_path):
     assert submitted[0] == (KIND_IMAGES, {"project_dir": str(pdir), "script": "TIÊU ĐỀ: T\n", "regenerate": [2, 5],
                                           "fast": True})
     assert submitted[1][0] == KIND_RENDER and submitted[1][1]["show_en"] and "music" not in submitted[1][1]
+
+    # "Dự án mới" → bỏ dự án đang mở (không đụng đĩa); dán kịch bản tự viết → vẽ ảnh tạo dự án mới
+    page.job_id = None
+    page.btn_new.click()
+    assert page.project_dir is None and page.script.toPlainText() == "" and page.gallery.count() == 0
+    assert pdir.is_dir() and not page.btn_images.isEnabled() and not page.btn_new.isEnabled()
+    monkeypatch.setattr("pas.ui.pages.aifilm.models.require_runtime", lambda: None)
+    page.script.setPlainText("TIÊU ĐỀ: Rồng\n")
+    assert page.btn_images.isEnabled()
+    submitted.clear()
+    page.regen.clear()
+    page.btn_images.click()
+    assert submitted == [(KIND_IMAGES, {"script": "TIÊU ĐỀ: Rồng\n", "regenerate": [], "fast": True,
+                                        "output_dir": ""})]

@@ -123,6 +123,9 @@
     `zoom_in/zoom_out/pan_left/pan_right/pan_up/shake/flash`; xem hướng dẫn cú pháp dưới ô) → **Vẽ ảnh**. Khoảng 28 giây
     một ảnh (tích *Vẽ nhanh*: 4 bước thay vì 6, nhanh hơn, kém chi tiết hơn). Chạy lại chỉ vẽ cảnh đã đổi mô tả; muốn vẽ lại cảnh xấu thì
     gõ số cảnh vào *Vẽ lại cảnh* (vd. `3, 5`). Nhấp đúp ảnh trong danh sách để xem lớn.
+    - **Kịch bản tự viết (bỏ qua bước 1):** khi chưa mở dự án nào, dán kịch bản vào ô rồi bấm **Vẽ ảnh** — ứng dụng tự
+      tạo thư mục `<TIÊU ĐỀ> - phim AI` trong *Lưu dự án vào* (để trống = thư mục mặc định). Đang mở dự án cũ mà muốn
+      làm phim khác thì bấm **Dự án mới** trước, nếu không ảnh của dự án cũ sẽ bị thay (bấm *Dự án mới* không xóa gì trên đĩa).
   - **3. Dựng phim** — chọn *Độ phân giải* (720×1280 / 1080×1920), hiện câu tiếng Anh nhỏ dưới phụ đề, tiêu đề, nhãn
     "Nội dung tạo bằng AI", *Nhạc nền* (tùy chọn) + âm lượng → **Dựng phim** (vài chục giây). Kết quả `phim.mp4` và
     `ghi nguồn.txt`. Sửa lời thoại rồi dựng lại không cần vẽ lại ảnh; giọng đã đọc được dùng lại.

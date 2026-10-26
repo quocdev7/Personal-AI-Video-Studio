@@ -184,6 +184,29 @@ def test_validators():
     tasks.validate_story({"idea": "một ý tưởng đủ dài", "shots": 8})
     with pytest.raises(InvalidInput):
         tasks.validate_images({"project_dir": ""})
+    script = story.format_story(story.to_story(_answer(), 6))
+    tasks.validate_images({"script": script})  # chưa có dự án nhưng có kịch bản dán sẵn → hợp lệ
+    with pytest.raises(InvalidInput):
+        tasks.validate_images({"script": "TIÊU ĐỀ: thiếu cảnh"})
+
+
+def test_images_without_project_creates_one_from_pasted_script(tmp_path, monkeypatch):
+    settings = Settings(default_output_dir=str(tmp_path / "out"), min_free_disk_gb=0.0)
+    script = "# kịch bản tự viết\n" + story.format_story(story.to_story(_answer(), 6))
+    gen = FakeGenerator()
+    monkeypatch.setattr(models, "require_lcm", lambda d: Path(d))
+    images = tasks.make_images_handler(tmp_path, lambda: settings, lambda d: gen)
+    projs = []
+    for n in (1, 2):  # dán lần hai → dự án riêng, không ghi đè dự án đầu
+        ctx, logs = _ctx({"script": script, "output_dir": str(tmp_path / "mine")}, tmp_path / f"t{n}")
+        out = images(ctx)
+        proj = Path(out["project_dir"])
+        assert proj.parent == tmp_path / "mine" and out["generated"] == 6
+        assert project.load(proj)["images"] and story.parse_story(project.read_script(proj)).title == "The Silver Secret"
+        assert len(list((proj / project.IMAGES).glob("cảnh *.png"))) == 6
+        projs.append(proj)
+    assert projs[0].name == "The Silver Secret - phim AI" and projs[1] != projs[0]
+    assert sorted((tmp_path / "mine").iterdir()) == sorted(projs)
 
 
 # ------------------------------------------------------------------ chạy thật 3 bước

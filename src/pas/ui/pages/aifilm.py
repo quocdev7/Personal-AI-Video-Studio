@@ -33,6 +33,8 @@ SCRIPT_HELP = (
     "'NGƯỜI NÓI:' (để trống = cảnh không thoại), 'ẢNH:' mô tả hình bằng tiếng Anh (gọi nhân vật bằng tên), "
     "'EN:' lời thoại tiếng Anh, 'VI:' phụ đề. Dòng bắt đầu bằng # là ghi chú."
 )
+NO_PROJECT = ("Chưa có dự án — chạy bước 1, mở dự án cũ, hoặc dán kịch bản vào bước 2 rồi bấm 'Vẽ ảnh' "
+              "(tự tạo dự án mới trong thư mục 'Lưu dự án vào').")
 
 
 class AiFilmPage(QWidget):
@@ -64,13 +66,16 @@ class AiFilmPage(QWidget):
         pbox = QGroupBox("Dự án và mô hình")
         pl = QVBoxLayout(pbox)
         row = QHBoxLayout()
-        self.project_label = QLabel("Chưa có dự án — chạy bước 1 hoặc mở dự án cũ.")
+        self.project_label = QLabel(NO_PROJECT)
         self.project_label.setWordWrap(True)
+        self.btn_new = button("Dự án mới")
+        self.btn_new.clicked.connect(self._new_project)
         self.btn_project = button("Mở dự án…")
         self.btn_project.clicked.connect(self._choose_project)
         self.btn_open = button("Mở thư mục dự án")
         self.btn_open.clicked.connect(lambda: open_in_explorer(self, self.project_dir))
         row.addWidget(self.project_label, 1)
+        row.addWidget(self.btn_new)
         row.addWidget(self.btn_project)
         row.addWidget(self.btn_open)
         pl.addLayout(row)
@@ -110,8 +115,10 @@ class AiFilmPage(QWidget):
         b2 = QGroupBox("2. Sửa kịch bản, vẽ ảnh từng cảnh")
         f2 = QFormLayout(b2)
         self.script = QPlainTextEdit()
-        self.script.setPlaceholderText("Kịch bản từ bước 1 hiện ở đây — sửa thoại, phụ đề, mô tả ảnh tùy ý.")
+        self.script.setPlaceholderText("Kịch bản từ bước 1 hiện ở đây — sửa thoại, phụ đề, mô tả ảnh tùy ý. "
+                                       "Hoặc dán kịch bản tự viết rồi bấm 'Vẽ ảnh' (không cần bước 1).")
         self.script.setMinimumHeight(220)
+        self.script.textChanged.connect(self._sync)
         self.regen = QLineEdit()
         self.regen.setPlaceholderText("vd: 2, 5 — vẽ lại ảnh các cảnh này với hạt giống mới (để trống = không)")
         self.fast = QCheckBox("Vẽ nhanh (4 bước thay vì 6 — nhanh hơn ~25%, ảnh kém chi tiết hơn)")
@@ -225,7 +232,9 @@ class AiFilmPage(QWidget):
         has_proj = bool(self.project_dir)
         has_images = has_proj and any((Path(self.project_dir) / project.IMAGES).glob("cảnh *.png"))
         self.btn_story.setEnabled(not busy)
-        self.btn_images.setEnabled(not busy and has_proj and not runtime)
+        has_script = bool(self.script.toPlainText().strip())
+        self.btn_images.setEnabled(not busy and (has_proj or has_script) and not runtime)
+        self.btn_new.setEnabled(not busy and has_proj)
         self.btn_render.setEnabled(not busy and has_images)
         self.music_volume.setEnabled(bool(self.music.path()))
         self.btn_project.setEnabled(not busy)
@@ -261,6 +270,15 @@ class AiFilmPage(QWidget):
                                    f.stem.replace("cảnh ", "Cảnh "))
             item.setData(Qt.ItemDataRole.UserRole, str(f))
             self.gallery.addItem(item)
+
+    def _new_project(self) -> None:
+        """Bỏ dự án đang mở (không xóa gì trên đĩa) để kịch bản tiếp theo tạo dự án riêng, không ghi đè ảnh cũ."""
+        self.project_dir = None
+        self.project_label.setText(NO_PROJECT)
+        self.script.clear()
+        self.gallery.clear()
+        self.result.clear()
+        self._sync()
 
     def _choose_project(self) -> None:
         start = self.project_dir or self.out.path() or str(Path.home())
@@ -319,10 +337,14 @@ class AiFilmPage(QWidget):
         except ValueError:
             show_error(self, PasError("Danh sách cảnh cần vẽ lại không hợp lệ.", "Ví dụ: 2, 5, 7"), "Không thể bắt đầu")
             return
-        self._submit(KIND_IMAGES, f"Phim AI: vẽ ảnh {Path(self.project_dir).name}", {
-            "project_dir": self.project_dir, "script": self.script.toPlainText(), "regenerate": regen,
-            "fast": self.fast.isChecked(),
-        })
+        params = {"script": self.script.toPlainText(), "regenerate": regen, "fast": self.fast.isChecked()}
+        if self.project_dir:
+            params["project_dir"] = self.project_dir
+            title = f"Phim AI: vẽ ảnh {Path(self.project_dir).name}"
+        else:
+            params["output_dir"] = self.out.path()
+            title = "Phim AI: vẽ ảnh (dự án mới từ kịch bản dán sẵn)"
+        self._submit(KIND_IMAGES, title, params)
 
     def _run_render(self) -> None:
         params = {"project_dir": self.project_dir, "script": self.script.toPlainText(),
